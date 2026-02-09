@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <!-- Use forward slashes so dotnet-ef can resolve paths correctly in Linux containers -->
+    <BaseOutputPath>bin/</BaseOutputPath>
+    <BaseIntermediateOutputPath>obj/</BaseIntermediateOutputPath>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,85 @@
+services:
+  db:
+    image: postgres:16
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-base}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-base}
+      POSTGRES_DB: ${POSTGRES_DB:-base_db}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-base}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Base.API/Dockerfile
+    ports:
+      - "5000:80"   # HTTP
+      - "5001:443"  # HTTPS (requires certs / reverse proxy in front)
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: "http://+:80"
+      # Connection string: prefer using environment variables or Docker secrets in production
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable"
+      DEFAULT_CONNECTION: "Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable"
+      # Optional: disable app-level HTTPS redirection when using an external HTTPS reverse-proxy
+      DisableHttpsRedirection: "true"
+      # Security / secret values should be supplied securely in production
+      JWT__SecretKey: "${JWT__SECRETKEY}"
+      JWT__Issuer: "${JWT__ISSUER}"
+      JWT__Audience: "${JWT__AUDIENCE}"
+      JWT__AccessTokenExpirationMinutes: "${JWT__ACCESSTOKENEXPIRATIONMINUTES}"
+      JWT__RefreshTokenExpirationDays: "${JWT__REFRESHTOKENEXPIRATIONDAYS}"
+      Security__PasswordHashing__Iterations: "${SECURITY__PASSWORDHASHING__ITERATIONS}"
+      ZeptoMailSettings__Token: "${ZEPTOMAILSETTINGS__TOKEN}"
+      Logging__Seq__ServerUrl: "${LOGGING__SEQ__SERVERURL:-http://seq:5341}"
+      Logging__Seq__MinimumLevel: "${LOGGING__SEQ__MINIMUMLEVEL:-Information}"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+      seq:
+        condition: service_started
+    restart: on-failure
+
+  migrator:
+    image: mcr.microsoft.com/dotnet/sdk:10.0.102
+    working_dir: /src
+    volumes:
+      - ./:/src
+    command: ["bash", "-lc", "/src/scripts/ef-migrate.sh"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable"
+      DEFAULT_CONNECTION: "Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable"
+      DOTNET_EF: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  seq:
+    image: datalust/seq:2024.3
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+    ports:
+      - "5341:5341"  # ingestion
+      - "5342:80"    # UI
+    volumes:
+      - seq-data:/data
+
+volumes:
+  db-data:
+  seq-data:
+
+# Notes: Use a .env file (see .env.example) or Docker secrets for production-grade deployments.
+
+

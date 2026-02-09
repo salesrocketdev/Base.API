@@ -1,0 +1,4 @@
+﻿interface_version: 1
+display_name: Base Boilerplate Context
+short_description: Evoluir o boilerplate .NET sem quebrar arquitetura, tenant, auth e deploy
+default_prompt: Use a skill Base Boilerplate Context para implementar mudanças mantendo arquitetura em camadas, isolamento por tenant, fluxo de autenticação, logs, migrations, Docker e testes.
