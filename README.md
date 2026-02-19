@@ -56,7 +56,7 @@ Como funciona:
 
 Onde o enqueue é usado hoje:
 - Boas-vindas no cadastro: `Base.Domain/Services/AuthService.cs` (`EnqueueWelcomeEmail`)
-- Código/token de reset: `Base.Domain/Services/AuthService.cs` (`EnqueueVerificationCodeEmail`)
+- Código OTP de reset: `Base.Domain/Services/AuthService.cs` (`EnqueueVerificationCodeEmail`)
 
 Configuração necessária:
 - `Base.API/appsettings.json`:
@@ -66,12 +66,15 @@ Configuração necessária:
   - `ZeptoMailSettings:FromName`
 - `.env.example` / `docker-compose.yml`:
   - `ZEPTOMAILSETTINGS__TOKEN`
+  - `SECURITY__PASSWORDRESET__PEPPER`
 - Hangfire (fila):
   - `Hangfire:Enabled` (habilita servidor de jobs)
   - `Hangfire:UseDashboard` (dashboard em dev)
+  - `Hangfire:Storage` (`PostgreSql` em produção, `InMemory` em desenvolvimento)
+  - `Hangfire:ConnectionString` (opcional; fallback para `ConnectionStrings:DefaultConnection`)
 
 Comportamento em desenvolvimento:
-- Sem token válido, o serviço entra em modo de desenvolvimento e loga o payload do email ao invés de enviar.
+- Sem token válido, o serviço entra em modo de desenvolvimento e não envia email.
 - Falha ao enfileirar/enviar não quebra o fluxo principal de auth (email é tratado como não crítico).
 
 Observação importante:
@@ -94,9 +97,58 @@ Observação importante:
    - API: `http://localhost:5000`
    - Seq: `http://localhost:5342`
 
+## Renomear boilerplate
+
+Scripts disponíveis:
+- PowerShell: `scripts/rename-project.ps1`
+- Shell: `scripts/rename-project.sh`
+
+Exemplos:
+- Simulação (Windows/PowerShell): `.\scripts\rename-project.ps1 -NewName Eradia -WhatIf -CodeOnly`
+- Execução real (Windows/PowerShell): `.\scripts\rename-project.ps1 -NewName Eradia`
+- Simulação (Linux/macOS): `./scripts/rename-project.sh Eradia --dry-run --code-only`
+- Execução real (Linux/macOS): `./scripts/rename-project.sh Eradia`
+
+Opções úteis:
+- Modo código apenas: `-CodeOnly` (ps1) / `--code-only` (sh)
+- Pular validação pós-rename (`dotnet build` + `dotnet test`): `-SkipValidation` (ps1) / `--skip-validation` (sh)
+
 ## Testes
 
 - Todos os testes: `dotnet test Base.Boilerplate.sln`
+
+## Fluxo de recuperação de senha (OTP)
+
+1. `POST /api/auth/forgot-password` com email:
+```json
+{
+  "email": "user@example.com"
+}
+```
+2. API sempre responde sucesso (evita enumeração de usuário) e, se a conta existir, envia OTP por email.
+3. `POST /api/auth/reset-password` com `email + otp + newPassword`:
+```json
+{
+  "email": "user@example.com",
+  "otp": "123456",
+  "newPassword": "NovaSenhaForte123!"
+}
+```
+
+Regras atuais:
+- OTP numérico de 6 dígitos.
+- Expiração de 30 minutos.
+- Novo OTP invalida o anterior.
+- Ao resetar senha, refresh tokens do usuário são revogados.
+
+## Segurança e configuração
+
+- `Seed:Enabled` deve permanecer `false` por padrão fora de desenvolvimento.
+- Configure segredos fortes no `.env`:
+  - `JWT__SECRETKEY`
+  - `SECURITY__PASSWORDRESET__PEPPER`
+  - `POSTGRES_PASSWORD`
+  - `SEED__ADMINPASSWORD` (somente se seed estiver habilitado)
 
 ## Convenções para evoluir o boilerplate
 
