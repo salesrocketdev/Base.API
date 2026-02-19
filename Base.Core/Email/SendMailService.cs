@@ -160,7 +160,7 @@ public class SendMailService : ISendMailService
                 {
                     user_name = model.Name,
                     verification_code = model.OTP,
-                    expiration_minutes = "30",
+                    expiration_minutes = model.ExpirationMinutes.ToString(),
                     year = DateTime.UtcNow.Year
                 }
             };
@@ -188,7 +188,7 @@ public class SendMailService : ISendMailService
             // Em modo de desenvolvimento, apenas loga o email
             if (_apiToken == "development-token")
             {
-                _logger.LogInformation("Development mode: Email would be sent with data: {JsonBody}", JsonConvert.SerializeObject(jsonBody, Formatting.Indented));
+                _logger.LogInformation("Development mode: email sending skipped.");
                 return true;
             }
 

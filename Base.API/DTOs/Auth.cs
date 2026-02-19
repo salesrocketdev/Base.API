@@ -27,11 +27,12 @@ public record ForgotPasswordRequest(
 );
 
 public record ResetPasswordRequest(
-    [Required] string Token,
+    [Required][EmailAddress] string Email,
+    [Required][RegularExpression(@"^\d{6}$")] string Otp,
     [Required][MinLength(ValidationConstants.PasswordMinLength)] string NewPassword
 );
 
-public record UserSummary(Guid Id, string Email, string? Name);
+public record UserSummary(Guid Id, string Email, string? Name, string? AvatarUrl);
 
 public record LoginResponse(string AccessToken, string RefreshToken, UserSummary User);
 

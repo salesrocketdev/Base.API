@@ -11,7 +11,7 @@ services:
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-base}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-base} -d ${POSTGRES_DB:-base_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -38,7 +38,10 @@ services:
       JWT__AccessTokenExpirationMinutes: "${JWT__ACCESSTOKENEXPIRATIONMINUTES}"
       JWT__RefreshTokenExpirationDays: "${JWT__REFRESHTOKENEXPIRATIONDAYS}"
       Security__PasswordHashing__Iterations: "${SECURITY__PASSWORDHASHING__ITERATIONS}"
+      Security__PasswordReset__Pepper: "${SECURITY__PASSWORDRESET__PEPPER}"
       ZeptoMailSettings__Token: "${ZEPTOMAILSETTINGS__TOKEN}"
+      Hangfire__Storage: "${HANGFIRE__STORAGE:-PostgreSql}"
+      Hangfire__ConnectionString: "${HANGFIRE__CONNECTIONSTRING:-Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable}"
       Logging__Seq__ServerUrl: "${LOGGING__SEQ__SERVERURL:-http://seq:5341}"
       Logging__Seq__MinimumLevel: "${LOGGING__SEQ__MINIMUMLEVEL:-Information}"
     depends_on:

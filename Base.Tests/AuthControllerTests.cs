@@ -82,13 +82,13 @@ public class AuthControllerTests
         public Task<(string accessToken, string refreshToken)> RefreshTokenAsync(string refreshTokenValue)
             => Task.FromResult(("access", "refresh"));
 
-        public Task LogoutAsync(string refreshTokenValue) => Task.CompletedTask;
+        public Task LogoutAsync(int currentUserId, string refreshTokenValue) => Task.CompletedTask;
 
         public Task<User?> GetCurrentUserAsync(int userId)
             => Task.FromResult<User?>(new User { Id = userId, Email = "user@test.local", CompanyId = 1 });
 
         public Task InitiatePasswordResetAsync(string email) => Task.CompletedTask;
 
-        public Task ResetPasswordAsync(string token, string newPassword) => Task.CompletedTask;
+        public Task ResetPasswordAsync(string email, string otp, string newPassword) => Task.CompletedTask;
     }
 }

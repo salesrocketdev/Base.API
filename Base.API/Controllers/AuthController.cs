@@ -50,7 +50,7 @@ public class AuthController : ControllerBase
             var response = new LoginResponse(
                 accessToken,
                 refreshToken,
-                new UserSummary(user.PublicId, user.Email, user.Name)
+                new UserSummary(user.PublicId, user.Email, user.Name, user.AvatarUrl)
             );
 
             return Ok(ApiResponse<LoginResponse>.Ok(response));
@@ -86,7 +86,16 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<IActionResult> Logout([FromBody] LogoutRequest request)
     {
-        await _authService.LogoutAsync(request.RefreshToken);
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+        {
+            return Unauthorized(ApiResponse<object?>.Fail(
+                "Unauthorized",
+                new ApiError(ApiErrorCodes.Unauthorized, "Unauthorized", ApiErrorTypes.Unauthorized)
+            ));
+        }
+
+        await _authService.LogoutAsync(userId, request.RefreshToken);
         return Ok(ApiResponse<object?>.Ok(null, "Logged out successfully"));
     }
 
@@ -112,7 +121,7 @@ public class AuthController : ControllerBase
             ));
         }
 
-        return Ok(ApiResponse<UserSummary>.Ok(new UserSummary(user.PublicId, user.Email, user.Name)));
+        return Ok(ApiResponse<UserSummary>.Ok(new UserSummary(user.PublicId, user.Email, user.Name, user.AvatarUrl)));
     }
 
     [HttpPost("forgot-password")]
@@ -120,7 +129,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
     {
         await _authService.InitiatePasswordResetAsync(request.Email);
-        return Ok(ApiResponse<object?>.Ok(null, "If the email exists, a reset link has been sent."));
+        return Ok(ApiResponse<object?>.Ok(null, "If the email exists, an OTP code has been sent."));
     }
 
     [HttpPost("reset-password")]
@@ -129,7 +138,7 @@ public class AuthController : ControllerBase
     {
         try
         {
-            await _authService.ResetPasswordAsync(request.Token, request.NewPassword);
+            await _authService.ResetPasswordAsync(request.Email, request.Otp, request.NewPassword);
             return Ok(ApiResponse<object?>.Ok(null, "Password reset successfully"));
         }
         catch (InvalidOperationException ex)

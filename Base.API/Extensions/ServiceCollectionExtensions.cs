@@ -1,5 +1,6 @@
 using AspNetCoreRateLimit;
 using Hangfire;
+using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -33,6 +34,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
         services.AddScoped<ITokenHasher, Sha256TokenHasher>();
+        services.AddScoped<IPasswordResetOtpProtector, PasswordResetOtpProtector>();
         services.AddScoped<IJwtTokenGenerator>(sp =>
         {
             var config = sp.GetRequiredService<IConfiguration>();
@@ -127,11 +129,31 @@ public static class ServiceCollectionExtensions
             return services;
         }
 
-        services.AddHangfire(config => config
-            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
-            .UseSimpleAssemblyNameTypeSerializer()
-            .UseRecommendedSerializerSettings()
-            .UseInMemoryStorage());
+        var storage = configuration["Hangfire:Storage"] ?? "PostgreSql";
+        var hangfireConnection = configuration.GetConnectionString("HangfireConnection")
+            ?? configuration["Hangfire:ConnectionString"]
+            ?? configuration.GetConnectionString("DefaultConnection");
+
+        services.AddHangfire(config =>
+        {
+            config
+                .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+                .UseSimpleAssemblyNameTypeSerializer()
+                .UseRecommendedSerializerSettings();
+
+            if (string.Equals(storage, "InMemory", StringComparison.OrdinalIgnoreCase))
+            {
+                config.UseInMemoryStorage();
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(hangfireConnection))
+            {
+                throw new InvalidOperationException("Hangfire PostgreSQL storage requires Hangfire:ConnectionString or ConnectionStrings:DefaultConnection.");
+            }
+
+            config.UsePostgreSqlStorage(options => options.UseNpgsqlConnection(hangfireConnection));
+        });
 
         services.AddHangfireServer();
 

@@ -24,7 +24,7 @@ public class CompanySeeder : ISeeder
 
     public async Task SeedAsync()
     {
-        var enabled = _configuration.GetValue("Seed:Enabled", true);
+        var enabled = _configuration.GetValue("Seed:Enabled", false);
         if (!enabled)
         {
             _logger.LogInformation("Company seeding is disabled");
