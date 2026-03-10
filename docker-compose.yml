@@ -11,21 +11,40 @@ services:
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-base}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-base} -d ${POSTGRES_DB:-base_db}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   api:
     build:
       context: .
       dockerfile: Base.API/Dockerfile
     ports:
-      - "5000:80"   # HTTP
-      - "5001:443"  # HTTPS (requires certs / reverse proxy in front)
+      - "5000:80" # HTTP
+      - "5001:443" # HTTPS (requires certs / reverse proxy in front)
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ASPNETCORE_URLS: "http://+:80"
+      Database__ApplyMigrationsOnStartup: "false"
       # Connection string: prefer using environment variables or Docker secrets in production
       ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable"
       DEFAULT_CONNECTION: "Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable"
@@ -38,7 +57,30 @@ services:
       JWT__AccessTokenExpirationMinutes: "${JWT__ACCESSTOKENEXPIRATIONMINUTES}"
       JWT__RefreshTokenExpirationDays: "${JWT__REFRESHTOKENEXPIRATIONDAYS}"
       Security__PasswordHashing__Iterations: "${SECURITY__PASSWORDHASHING__ITERATIONS}"
+      Seed__Enabled: "${SEED__ENABLED:-false}"
+      Seed__Scenario: "${SEED__SCENARIO:-base}"
+      Seed__ResetBeforeSeed: "${SEED__RESETBEFORESEED:-false}"
+      Seed__AdminEmail: "${SEED__ADMINEMAIL:-admin@base.local}"
+      Seed__AdminPassword: "${SEED__ADMINPASSWORD:-}"
+      Seed__AdminName: "${SEED__ADMINNAME:-Administrator}"
+      Seed__LearnerEmail: "${SEED__LEARNEREMAIL:-learner@base.local}"
+      Seed__LearnerPassword: "${SEED__LEARNERPASSWORD:-}"
+      Seed__LearnerName: "${SEED__LEARNERNAME:-Learner}"
+      Seed__OrganizationName: "${SEED__ORGANIZATIONNAME:-Eradia Demo}"
+      Seed__OrganizationSlug: "${SEED__ORGANIZATIONSLUG:-eradia-demo}"
+      Security__PasswordReset__Pepper: "${SECURITY__PASSWORDRESET__PEPPER}"
       ZeptoMailSettings__Token: "${ZEPTOMAILSETTINGS__TOKEN}"
+      ZeptoMailSettings__FromAddress: "${ZEPTOMAILSETTINGS__FROMADDRESS:-noreply@base.local}"
+      ZeptoMailSettings__FromName: "${ZEPTOMAILSETTINGS__FROMNAME:-Eradia}"
+      Hangfire__Storage: "${HANGFIRE__STORAGE:-PostgreSql}"
+      Hangfire__ConnectionString: "${HANGFIRE__CONNECTIONSTRING:-Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable}"
+      Redis__Enabled: "${REDIS__ENABLED:-true}"
+      Redis__ConnectionString: "${REDIS__CONNECTIONSTRING:-redis:6379}"
+      Redis__InstanceName: "${REDIS__INSTANCENAME:-eradia}"
+      Fcm__Enabled: "${FCM__ENABLED:-false}"
+      Fcm__ProjectId: "${FCM__PROJECTID:-}"
+      Fcm__ServiceAccountJson: "${FCM__SERVICEACCOUNTJSON:-}"
+      Fcm__ServiceAccountPath: "${FCM__SERVICEACCOUNTPATH:-}"
       Logging__Seq__ServerUrl: "${LOGGING__SEQ__SERVERURL:-http://seq:5341}"
       Logging__Seq__MinimumLevel: "${LOGGING__SEQ__MINIMUMLEVEL:-Information}"
     depends_on:
@@ -48,6 +90,8 @@ services:
         condition: service_completed_successfully
       seq:
         condition: service_started
+      redis:
+        condition: service_healthy
     restart: on-failure
 
   migrator:
@@ -71,15 +115,14 @@ services:
     environment:
       ACCEPT_EULA: "Y"
     ports:
-      - "5341:5341"  # ingestion
-      - "5342:80"    # UI
+      - "5341:5341" # ingestion
+      - "5342:80" # UI
     volumes:
       - seq-data:/data
 
 volumes:
   db-data:
   seq-data:
+  redis-data:
 
 # Notes: Use a .env file (see .env.example) or Docker secrets for production-grade deployments.
-
-

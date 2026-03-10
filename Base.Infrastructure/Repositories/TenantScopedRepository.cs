@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Base.Core.Tenant;
 using Base.Domain.Entities;
-using Base.Domain.Interfaces;
+using Base.Domain.Interfaces.Repositories;
 using Base.Infrastructure.Data;
 
 namespace Base.Infrastructure.Repositories;
@@ -155,6 +155,7 @@ public abstract class TenantScopedRepository<TEntity> : ITenantScopedRepository<
         }
     }
 }
+
 
 
 

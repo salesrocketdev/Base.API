@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Base.API.Controllers;
 using Base.API.DTOs;
 using Base.Domain.Entities;
-using Base.Domain.Interfaces;
+using Base.Domain.Interfaces.Services;
 
 namespace Base.Tests;
 

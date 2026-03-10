@@ -1,6 +1,6 @@
 using Base.Domain.Entities;
 
-namespace Base.Domain.Interfaces;
+namespace Base.Domain.Interfaces.Repositories;
 
 public interface IRefreshTokenRepository : IBaseRepository<RefreshToken>
 {
@@ -8,3 +8,4 @@ public interface IRefreshTokenRepository : IBaseRepository<RefreshToken>
     Task<IEnumerable<RefreshToken>> GetActiveTokensByUserIdAsync(int userId);
     Task RevokeAllTokensByUserIdAsync(int userId);
 }
+

@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Base.Domain.Entities;
-using Base.Domain.Interfaces;
+using Base.Domain.Interfaces.Repositories;
 using Base.Infrastructure.Data;
 
 namespace Base.Infrastructure.Repositories;
@@ -61,5 +61,6 @@ public class CompanyMemberRepository : BaseRepository<CompanyMember>, ICompanyMe
         return await _context.CompanyMembers.AnyAsync(cm => cm.UserId == userId);
     }
 }
+
 
 

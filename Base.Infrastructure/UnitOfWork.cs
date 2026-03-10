@@ -1,5 +1,6 @@
 using Base.Core.Tenant;
 using Base.Domain.Interfaces;
+using Base.Domain.Interfaces.Repositories;
 using Base.Infrastructure.Data;
 using Base.Infrastructure.Repositories;
 

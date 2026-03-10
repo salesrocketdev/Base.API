@@ -4,8 +4,9 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System.Net;
 using System.Text;
-using Base.Core.Configuration;
 using Base.Core.Email.Models;
+using Base.Core.Configuration;
+using Base.Core.Email;
 
 namespace Base.Core.Email;
 
@@ -28,8 +29,8 @@ public class SendMailService : ISendMailService
             _logger.LogWarning("ZeptoMail settings not configured. Running in development mode.");
             _apiUrl = "https://api.zeptomail.com/v1.1";
             _apiToken = "development-token";
-            _fromAddress = "noreply@Base.com";
-            _fromName = "Base Development";
+            _fromAddress = "noreply@Eradia.com";
+            _fromName = "Eradia Development";
         }
         else
         {
@@ -41,7 +42,7 @@ public class SendMailService : ISendMailService
 
         _httpClient = new HttpClient
         {
-            BaseAddress = new Uri(_apiUrl + "/template")
+            BaseAddress = new Uri(_apiUrl + "/email/template")
         };
 
         _httpClient.DefaultRequestHeaders.Accept.Add(
@@ -62,9 +63,9 @@ public class SendMailService : ISendMailService
         }
         catch (Exception ex)
         {
-            // Log do erro mas não lança exceção - email é não crítico
+            // Log do erro mas nÃ£o lanÃ§a exceÃ§Ã£o - email Ã© nÃ£o crÃ­tico
             _logger.LogWarning(ex, "Failed to enqueue welcome email job for {Email}. This is non-critical.", toEmail);
-            // Não fazer throw - permitir que o processo continue normalmente
+            // NÃ£o fazer throw - permitir que o processo continue normalmente
         }
     }
 
@@ -77,9 +78,9 @@ public class SendMailService : ISendMailService
         }
         catch (Exception ex)
         {
-            // Log do erro mas não lança exceção - email é não crítico
+            // Log do erro mas nÃ£o lanÃ§a exceÃ§Ã£o - email Ã© nÃ£o crÃ­tico
             _logger.LogWarning(ex, "Failed to enqueue verification code email job for {Email}. This is non-critical.", toEmail);
-            // Não fazer throw - permitir que o processo continue normalmente
+            // NÃ£o fazer throw - permitir que o processo continue normalmente
         }
     }
 
@@ -96,7 +97,7 @@ public class SendMailService : ISendMailService
         {
             var body = new
             {
-                mail_template_key = "2d6f.5d02038cfdc123c3.k1.f771b2c0-a4cd-11f0-bf20-765e7256bde4.199c75eb7ec", // TODO: Replace with actual Base template key
+                mail_template_key = "2d6f.65f0e970e073d629.k1.bed55511-10d0-11f1-8b85-765e7256bde4.19c8b3adce0",
                 from = new
                 {
                     address = _fromAddress,
@@ -116,7 +117,7 @@ public class SendMailService : ISendMailService
                 merge_info = new
                 {
                     user_name = $"{model.Name} {model.LastName}".Trim(),
-                    app_url = "https://Base.com", // TODO: Replace with actual app URL
+                    app_url = "https://Eradia.com", // TODO: Replace with actual app URL
                     year = DateTime.UtcNow.Year
                 }
             };
@@ -131,7 +132,7 @@ public class SendMailService : ISendMailService
     }
 
     /// <summary>
-    /// Envia e-mail de código de verificação usando template.
+    /// Envia e-mail de cÃ³digo de verificaÃ§Ã£o usando template.
     /// </summary>
     public async Task<bool> SendVerificationCodeEmail(string email, VerificationCodeModel model)
     {
@@ -139,7 +140,7 @@ public class SendMailService : ISendMailService
         {
             var body = new
             {
-                mail_template_key = "2d6f.5d02038cfdc123c3.k1.2507c2a0-a4ca-11f0-bf20-765e7256bde4.199c745abca", // TODO: Replace with actual Base template key
+                mail_template_key = "2d6f.65f0e970e073d629.k1.d246bfd1-10d0-11f1-8b85-765e7256bde4.19c8b3b5c4c",
                 from = new
                 {
                     address = _fromAddress,
@@ -160,7 +161,7 @@ public class SendMailService : ISendMailService
                 {
                     user_name = model.Name,
                     verification_code = model.OTP,
-                    expiration_minutes = "30",
+                    expiration_minutes = model.ExpirationMinutes.ToString(),
                     year = DateTime.UtcNow.Year
                 }
             };
@@ -188,7 +189,7 @@ public class SendMailService : ISendMailService
             // Em modo de desenvolvimento, apenas loga o email
             if (_apiToken == "development-token")
             {
-                _logger.LogInformation("Development mode: Email would be sent with data: {JsonBody}", JsonConvert.SerializeObject(jsonBody, Formatting.Indented));
+                _logger.LogInformation("Development mode: email sending skipped.");
                 return true;
             }
 
@@ -218,4 +219,6 @@ public class SendMailService : ISendMailService
 
     #endregion
 }
+
+
 

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Base.Domain.Entities;
 using Base.Domain.Interfaces;
+using Base.Domain.Interfaces.Services;
 
 namespace Base.Domain.Services;
 

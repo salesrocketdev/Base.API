@@ -1,4 +1,4 @@
-namespace Base.Domain.Interfaces;
+namespace Base.Domain.Interfaces.Repositories;
 
 public interface IBaseRepository<TEntity> where TEntity : class
 {
@@ -10,4 +10,5 @@ public interface IBaseRepository<TEntity> where TEntity : class
     Task DeleteAsync(int id);
     Task<bool> ExistsAsync(int id);
 }
+
 

@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Base.API.Constants;
 using Base.API.DTOs;
-using Base.Domain.Interfaces;
+using Base.Domain.Interfaces.Services;
 
 namespace Base.API.Controllers;
 

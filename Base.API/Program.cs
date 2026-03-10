@@ -128,13 +128,19 @@ var isEfTool = AppDomain.CurrentDomain.GetAssemblies()
     .Any(a => string.Equals(a.GetName().Name, "Microsoft.EntityFrameworkCore.Design", StringComparison.Ordinal));
 var isEfEnv = string.Equals(Environment.GetEnvironmentVariable("DOTNET_EF"), "1", StringComparison.Ordinal)
     || string.Equals(Environment.GetEnvironmentVariable("EFCORE_DESIGNTIME"), "1", StringComparison.Ordinal);
+var isRunningInContainer = string.Equals(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"), "true", StringComparison.OrdinalIgnoreCase);
+var applyMigrationsOnStartup = app.Configuration.GetValue("Database:ApplyMigrationsOnStartup", !isRunningInContainer);
 
-if (!isEfTool && !isEfEnv)
+if (!isEfTool && !isEfEnv && applyMigrationsOnStartup)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     await db.Database.MigrateAsync();
+}
 
+if (!isEfTool && !isEfEnv)
+{
+    using var scope = app.Services.CreateScope();
     var seederRunner = scope.ServiceProvider.GetRequiredService<SeederRunner>();
     await seederRunner.RunAsync();
 }

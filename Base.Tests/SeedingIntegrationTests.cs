@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Base.Core.Security;
 using Base.Infrastructure.Data;
 using Base.Infrastructure.Seeding;
+using Base.Infrastructure.Seeding.Seeders;
 
 namespace Base.Tests;
 

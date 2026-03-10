@@ -1,5 +1,6 @@
 using AspNetCoreRateLimit;
 using Hangfire;
+using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -9,10 +10,12 @@ using Base.Core.Email;
 using Base.Core.Security;
 using Base.Core.Tenant;
 using Base.Domain.Interfaces;
+using Base.Domain.Interfaces.Services;
 using Base.Domain.Services;
 using Base.Infrastructure;
 using Base.Infrastructure.Data;
 using Base.Infrastructure.Seeding;
+using Base.Infrastructure.Seeding.Seeders;
 using System.Text;
 
 namespace Base.API.Extensions;
@@ -127,11 +130,28 @@ public static class ServiceCollectionExtensions
             return services;
         }
 
-        services.AddHangfire(config => config
-            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
-            .UseSimpleAssemblyNameTypeSerializer()
-            .UseRecommendedSerializerSettings()
-            .UseInMemoryStorage());
+        var storage = configuration.GetValue<string>("Hangfire:Storage") ?? "InMemory";
+        var connectionString = configuration["Hangfire:ConnectionString"] ?? configuration.GetConnectionString("DefaultConnection");
+
+        services.AddHangfire(config =>
+        {
+            config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+                .UseSimpleAssemblyNameTypeSerializer()
+                .UseRecommendedSerializerSettings();
+
+            if (string.Equals(storage, "PostgreSql", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(connectionString))
+                {
+                    throw new InvalidOperationException("Hangfire storage is PostgreSql but no connection string was provided.");
+                }
+
+                config.UsePostgreSqlStorage(options => options.UseNpgsqlConnection(connectionString));
+                return;
+            }
+
+            config.UseInMemoryStorage();
+        });
 
         services.AddHangfireServer();
 

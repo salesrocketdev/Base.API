@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Base.Domain.Entities;
 using Base.Domain.Interfaces;
 
 namespace Base.API.Middleware;
@@ -20,8 +21,21 @@ public class TenantMiddleware
 
         if (userIdClaim != null && int.TryParse(userIdClaim.Value, out var userId))
         {
-            // Get company member to resolve company ID
-            var companyMember = await unitOfWork.CompanyMembers.GetByUserIdAsync(userId);
+            CompanyMember? companyMember = null;
+
+            // Prefer explicit tenant from token (switch-organization flow).
+            var organizationClaim = context.User.FindFirst("org_pid")?.Value;
+            if (Guid.TryParse(organizationClaim, out var organizationPublicId))
+            {
+                var company = await unitOfWork.Companies.GetByPublicIdAsync(organizationPublicId);
+                if (company != null)
+                {
+                    companyMember = await unitOfWork.CompanyMembers.GetByCompanyAndUserIdAsync(company.Id, userId);
+                }
+            }
+
+            // Backward-compatible fallback: default user membership.
+            companyMember ??= await unitOfWork.CompanyMembers.GetByUserIdAsync(userId);
             if (companyMember != null)
             {
                 // Add company ID to HttpContext.Items for use in services/repositories

@@ -1,6 +1,6 @@
 using Base.Domain.Entities;
 
-namespace Base.Domain.Interfaces;
+namespace Base.Domain.Interfaces.Services;
 
 public interface ICompanyService
 {
@@ -15,5 +15,6 @@ public interface ICompanyService
     Task UpdateByCompanyIdAsync(int companyId, string name, string? settingsJson = null);
     Task<CompanyMember> InviteMemberAsync(int companyId, string email, string role);
 }
+
 
 

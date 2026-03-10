@@ -1,4 +1,4 @@
-using Base.Domain.Interfaces;
+using Base.Domain.Interfaces.Repositories;
 using Base.Domain.Entities;
 using Base.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -65,6 +65,7 @@ public class BaseRepository<TEntity> : IBaseRepository<TEntity> where TEntity : 
         return await _context.Set<TEntity>().FindAsync(id) != null;
     }
 }
+
 
 
 

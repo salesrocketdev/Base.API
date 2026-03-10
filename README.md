@@ -1,116 +1,90 @@
-﻿# Base Boilerplate API (.NET 10 LTS)
+﻿# Base API Boilerplate (.NET 10)
 
-Boilerplate para iniciar APIs .NET multi-tenant com autenticação completa, logging estruturado, seeders e PostgreSQL via Docker.
+Boilerplate de API multi-tenant com JWT, PostgreSQL, EF Core e fluxo base de autenticacao e company.
 
-## Arquitetura
+## Endpoints
 
-Camadas da solution:
-- `Base.API`: controllers, middleware, composição de DI, configuração de segurança e pipeline HTTP.
-- `Base.Domain`: entidades, contratos de repositórios e serviços de domínio.
-- `Base.Infrastructure`: EF Core, DbContext, repositórios, UnitOfWork, migrations e seeders.
-- `Base.Core`: componentes cross-cutting (JWT, hash de senha, email, tenant contracts, helpers).
-- `Base.Tests`: testes de sanidade do boilerplate (auth, company e seeding).
+Auth:
 
-Fluxo de requisição (resumo):
-1. Request entra em `Base.API`.
-2. Middleware de autenticação valida JWT.
-3. `TenantMiddleware` resolve escopo de tenant (`CompanyId`).
-4. Serviços de domínio usam `IUnitOfWork` + repositórios.
-5. `TenantScopedRepository<T>` aplica isolamento por tenant para entidades com `CompanyId`.
+- `POST /api/auth/signup`
+- `POST /api/auth/login`
+- `POST /api/auth/login/initiate`
+- `POST /api/auth/refresh`
+- `POST /api/auth/switch-organization`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+- `POST /api/auth/forgot-password`
+- `POST /api/auth/reset-password`
+- `POST /api/auth/first-access/complete`
+- `POST /api/auth/first-access/resend`
 
-## O que já vem pronto
+Observacoes:
 
-- Auth completo:
-  - signup/login/me/refresh/logout/forgot-password/reset-password
-- Multi-tenant:
-  - contexto de tenant (`ITenantContext`) + middleware + repository scoping
-- Estrutura base de negócio:
-  - `Company` e `CompanyMember`
-- Observabilidade:
-  - Serilog + Seq + persistência de exceptions em `AppLogs`
-- Seeders idempotentes:
-  - admin user e company inicial
-- Email utility:
-  - contrato e implementação com integração configurável
-- Banco e execução:
-  - EF Core migrations + Docker Compose (`api`, `db`, `migrator`, `seq`)
+- `switch-organization` retorna novo access token com claim `org_pid` da organizacao ativa.
+- `forgot-password` e `first-access/resend` sempre retornam mensagem generica.
+- `reset-password` e `first-access/complete` usam OTP de 6 digitos.
 
-## Stack técnica
+Company:
 
-- .NET SDK: `10.0.102` (via `global.json`)
-- ASP.NET Core: `10.0.2`
-- EF Core: `10.0.2`
-- PostgreSQL 16
-- Hangfire (configurável)
-- xUnit para testes
+- `POST /api/company`
+- `GET /api/company/{id}`
+- `GET /api/company/me`
+- `PUT /api/company/me`
+- `POST /api/company/members/invite`
+- `PUT /api/company/{id}`
+- `DELETE /api/company/{id}`
 
-## Sistema de Email e Enqueue
+## Configuracao
 
-Provider atual:
-- ZeptoMail (`Base.Core/Email/SendMailService.cs`)
+Variaveis importantes:
 
-Como funciona:
-1. Serviços de domínio disparam métodos de enqueue via `ISendMailService`.
-2. `SendMailService` usa `BackgroundJob.Enqueue(...)` (Hangfire) para envio assíncrono.
-3. Job executa envio HTTP para API de template do ZeptoMail.
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `POSTGRES_DB`
+- `JWT__SECRETKEY`
+- `JWT__ISSUER`
+- `JWT__AUDIENCE`
+- `JWT__ACCESSTOKENEXPIRATIONMINUTES`
+- `JWT__REFRESHTOKENEXPIRATIONDAYS`
+- `SECURITY__PASSWORDHASHING__ITERATIONS`
+- `SECURITY__PASSWORDRESET__PEPPER`
+- `SEED__ENABLED`
+- `SEED__SCENARIO`
+- `SEED__RESETBEFORESEED`
+- `SEED__ADMINEMAIL`
+- `SEED__ADMINPASSWORD`
+- `SEED__ADMINNAME`
+- `SEED__LEARNEREMAIL`
+- `SEED__LEARNERPASSWORD`
+- `SEED__LEARNERNAME`
+- `SEED__ORGANIZATIONNAME`
+- `SEED__ORGANIZATIONSLUG`
+- `DATABASE__APPLYMIGRATIONSONSTARTUP`
+- `HANGFIRE__STORAGE`
+- `HANGFIRE__CONNECTIONSTRING`
 
-Onde o enqueue é usado hoje:
-- Boas-vindas no cadastro: `Base.Domain/Services/AuthService.cs` (`EnqueueWelcomeEmail`)
-- Código/token de reset: `Base.Domain/Services/AuthService.cs` (`EnqueueVerificationCodeEmail`)
+## Execucao local
 
-Configuração necessária:
-- `Base.API/appsettings.json`:
-  - `ZeptoMailSettings:Url`
-  - `ZeptoMailSettings:Token`
-  - `ZeptoMailSettings:FromAddress`
-  - `ZeptoMailSettings:FromName`
-- `.env.example` / `docker-compose.yml`:
-  - `ZEPTOMAILSETTINGS__TOKEN`
-- Hangfire (fila):
-  - `Hangfire:Enabled` (habilita servidor de jobs)
-  - `Hangfire:UseDashboard` (dashboard em dev)
-
-Comportamento em desenvolvimento:
-- Sem token válido, o serviço entra em modo de desenvolvimento e loga o payload do email ao invés de enviar.
-- Falha ao enfileirar/enviar não quebra o fluxo principal de auth (email é tratado como não crítico).
-
-Observação importante:
-- As `mail_template_key` e URL de app usadas no corpo dos emails ainda estão como placeholders/TODO no `SendMailService`.
-- Em projetos derivados, substitua template keys, domínio e variáveis de merge para seu ambiente.
-
-## Subir local (sem Docker)
-
-1. Copie `.env.example` para `.env` e ajuste segredos.
-2. Defina a connection string via ambiente (`ConnectionStrings__DefaultConnection`) se necessário.
-3. Rode:
-   - Windows: `./run-dev.ps1`
-   - Linux/macOS: `./run-dev.sh`
-
-## Subir com Docker
+Sem Docker:
 
 1. Copie `.env.example` para `.env`.
-2. Rode: `docker compose up --build -d`
+2. Ajuste os segredos e a conexao com banco.
+3. Execute `./run-dev.ps1` (Windows) ou `./run-dev.sh` (Linux/macOS).
+
+Com Docker:
+
+1. Copie `.env.example` para `.env`.
+2. Execute `docker compose up --build -d`.
 3. Endpoints:
    - API: `http://localhost:5000`
    - Seq: `http://localhost:5342`
 
-## Testes
+Notas de runtime:
 
-- Todos os testes: `dotnet test Base.Boilerplate.sln`
+- Com `docker-compose`, as migrations rodam pelo servico `migrator` (API com `Database__ApplyMigrationsOnStartup=false`).
+- Fora do Docker, controle de migration via `Database:ApplyMigrationsOnStartup`.
 
-## Convenções para evoluir o boilerplate
+## Build e testes
 
-- Evite acoplar regra de negócio específica neste repositório.
-- Mantenha novos módulos como "feature packs" plugáveis.
-- Toda entidade tenant-scoped deve conter `CompanyId`.
-- Atualize migration sempre que alterar modelo EF.
-- Prefira manter segredos via variáveis de ambiente.
-
-## Estrutura de apoio para IA (MCP + Skill)
-
-Este repositório inclui:
-- `.mcp.json`: configuração de servidor MCP de filesystem para fornecer contexto do projeto a assistentes.
-- `.codex/skills/base-boilerplate-context/SKILL.md`: skill para guiar implementações futuras sem quebrar o boilerplate.
-- `.codex/skills/base-boilerplate-context/references/email-system.md`: referência do fluxo de email, enqueue e configuração.
-
-Use essa skill quando pedir novas features para preservar arquitetura, multi-tenant, auth, logs e testes.
+- Build: `dotnet build`
+- Testes: `dotnet test`

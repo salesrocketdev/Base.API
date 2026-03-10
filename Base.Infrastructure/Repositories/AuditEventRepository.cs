@@ -1,5 +1,5 @@
 using Base.Domain.Entities;
-using Base.Domain.Interfaces;
+using Base.Domain.Interfaces.Repositories;
 using Base.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,3 +14,4 @@ public class AuditEventRepository : BaseRepository<AuditEvent>, IAuditEventRepos
         return await _context.AuditEvents.Where(a => a.UserId == userId).OrderByDescending(a => a.Timestamp).ToListAsync();
     }
 }
+

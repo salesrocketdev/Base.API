@@ -5,7 +5,7 @@ using Base.Domain.Entities;
 using Base.Infrastructure.Data;
 using System.Text.Json;
 
-namespace Base.Infrastructure.Seeding;
+namespace Base.Infrastructure.Seeding.Seeders;
 
 public class CompanySeeder : ISeeder
 {
@@ -84,4 +84,5 @@ public class CompanySeeder : ISeeder
         }
     }
 }
+
 

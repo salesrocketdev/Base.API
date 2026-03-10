@@ -1,6 +1,6 @@
 using Base.Domain.Entities;
 
-namespace Base.Domain.Interfaces;
+namespace Base.Domain.Interfaces.Repositories;
 
 public interface ICompanyRepository : IBaseRepository<Company>
 {
@@ -15,4 +15,5 @@ public interface ICompanyMemberRepository : IBaseRepository<CompanyMember>
     Task<CompanyMember?> GetByCompanyAndUserIdAsync(int companyId, int userId);
     Task<bool> IsUserInAnyCompanyAsync(int userId);
 }
+
 

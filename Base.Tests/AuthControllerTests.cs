@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Base.API.Controllers;
 using Base.API.DTOs;
 using Base.Domain.Entities;
-using Base.Domain.Interfaces;
+using Base.Domain.Interfaces.Services;
 
 namespace Base.Tests;
 
@@ -68,6 +68,9 @@ public class AuthControllerTests
         public Task<User> RegisterAsync(string email, string password, string? name)
             => Task.FromResult(RegisterResult ?? new User { Email = email, Name = name, CompanyId = 1 });
 
+        public Task<(string nextStep, string maskedEmail)> InitiateLoginAsync(string email)
+            => Task.FromResult<(string nextStep, string maskedEmail)>(("password", "u***r@test.local"));
+
         public Task<(User user, string accessToken, string refreshToken)> LoginAsync(string email, string password, string ipAddress, string userAgent)
         {
             if (LoginException != null)
@@ -82,13 +85,21 @@ public class AuthControllerTests
         public Task<(string accessToken, string refreshToken)> RefreshTokenAsync(string refreshTokenValue)
             => Task.FromResult(("access", "refresh"));
 
-        public Task LogoutAsync(string refreshTokenValue) => Task.CompletedTask;
+        public Task<string> SwitchOrganizationAsync(int userId, Guid organizationPublicId)
+            => Task.FromResult("access");
+
+        public Task LogoutAsync(int userId, string refreshTokenValue) => Task.CompletedTask;
 
         public Task<User?> GetCurrentUserAsync(int userId)
             => Task.FromResult<User?>(new User { Id = userId, Email = "user@test.local", CompanyId = 1 });
 
         public Task InitiatePasswordResetAsync(string email) => Task.CompletedTask;
 
-        public Task ResetPasswordAsync(string token, string newPassword) => Task.CompletedTask;
+        public Task ResetPasswordAsync(string email, string otp, string newPassword) => Task.CompletedTask;
+
+        public Task<(User user, string accessToken, string refreshToken)> CompleteFirstAccessAsync(string email, string otp, string newPassword, string firstName, string lastName, string ipAddress, string userAgent)
+            => Task.FromResult((new User { Email = email, Name = $"{firstName} {lastName}", CompanyId = 1 }, "access", "refresh"));
+
+        public Task ResendFirstAccessOtpAsync(string email) => Task.CompletedTask;
     }
 }

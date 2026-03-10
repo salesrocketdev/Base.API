@@ -5,7 +5,7 @@ using Base.Core.Security;
 using Base.Domain.Entities;
 using Base.Infrastructure.Data;
 
-namespace Base.Infrastructure.Seeding;
+namespace Base.Infrastructure.Seeding.Seeders;
 
 public class UserSeeder : ISeeder
 {
@@ -83,4 +83,5 @@ public class UserSeeder : ISeeder
         await _db.SaveChangesAsync();
     }
 }
+
 

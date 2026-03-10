@@ -5,6 +5,8 @@ using Base.Core.Security;
 using Base.Domain.Constants;
 using Base.Domain.Entities;
 using Base.Domain.Interfaces;
+using Base.Domain.Interfaces.Services;
+using System.Security.Cryptography;
 
 namespace Base.Domain.Services;
 
@@ -90,6 +92,24 @@ public class AuthService : IAuthService
         return user;
     }
 
+    public async Task<(string nextStep, string maskedEmail)> InitiateLoginAsync(string email)
+    {
+        var user = await _unitOfWork.Users.GetByEmailAsync(email.ToLower());
+        if (user == null)
+        {
+            return ("unavailable", MaskEmail(email));
+        }
+
+        var credentials = await _unitOfWork.UserCredentials.GetByUserIdAsync(user.Id);
+        if (credentials == null || string.IsNullOrWhiteSpace(credentials.PasswordHash))
+        {
+            await SendOtpAsync(user);
+            return ("first_access", MaskEmail(user.Email));
+        }
+
+        return ("password", MaskEmail(user.Email));
+    }
+
     public async Task<(User user, string accessToken, string refreshToken)> LoginAsync(string email, string password, string ipAddress, string userAgent)
     {
         var user = await _unitOfWork.Users.GetByEmailAsync(email.ToLower());
@@ -101,26 +121,19 @@ public class AuthService : IAuthService
         }
 
         var credentials = await _unitOfWork.UserCredentials.GetByUserIdAsync(user.Id);
-        if (credentials == null || !_passwordHasher.VerifyPassword(credentials.PasswordHash, password))
+        if (credentials == null || string.IsNullOrWhiteSpace(credentials.PasswordHash))
+        {
+            throw new InvalidOperationException("First access completion is required.");
+        }
+
+        if (!_passwordHasher.VerifyPassword(credentials.PasswordHash, password))
         {
             // Audit failed login
             await LogAuditEvent(user.Id, AuditEventTypes.LoginFailed, ipAddress, userAgent);
             throw new UnauthorizedAccessException("Invalid credentials.");
         }
 
-        var accessToken = _jwtTokenGenerator.GenerateAccessToken(user.Id, user.Email);
-        var refreshTokenValue = _jwtTokenGenerator.GenerateRefreshToken();
-        var refreshTokenHash = _tokenHasher.HashToken(refreshTokenValue);
-
-        var refreshToken = new RefreshToken
-        {
-            UserId = user.Id,
-            Token = refreshTokenHash,
-            ExpiresAt = DateTime.UtcNow.AddDays(AuthConstants.RefreshTokenLifetimeDays), // Configurable
-            DeviceInfo = userAgent
-        };
-
-        await _unitOfWork.RefreshTokens.CreateAsync(refreshToken);
+        var (accessToken, refreshTokenValue) = await CreateSessionAsync(user, userAgent);
 
         // Audit
         await LogAuditEvent(user.Id, AuditEventTypes.Login, ipAddress, userAgent);
@@ -128,6 +141,29 @@ public class AuthService : IAuthService
         await _unitOfWork.SaveChangesAsync();
 
         return (user, accessToken, refreshTokenValue);
+    }
+
+    public async Task<string> SwitchOrganizationAsync(int userId, Guid organizationPublicId)
+    {
+        var company = await _unitOfWork.Companies.GetByPublicIdAsync(organizationPublicId);
+        if (company == null)
+        {
+            throw new UnauthorizedAccessException("No active organization found for user.");
+        }
+
+        var membership = await _unitOfWork.CompanyMembers.GetByCompanyAndUserIdAsync(company.Id, userId);
+        if (membership == null)
+        {
+            throw new UnauthorizedAccessException("No active organization found for user.");
+        }
+
+        var user = await _unitOfWork.Users.GetByIdAsync(userId);
+        if (user == null)
+        {
+            throw new UnauthorizedAccessException("Invalid token.");
+        }
+
+        return _jwtTokenGenerator.GenerateAccessToken(user.Id, user.Email, company.PublicId);
     }
 
     public async Task<(string accessToken, string refreshToken)> RefreshTokenAsync(string refreshTokenValue)
@@ -151,7 +187,8 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("User not found.");
         }
 
-        var newAccessToken = _jwtTokenGenerator.GenerateAccessToken(user.Id, user.Email);
+        var organizationPublicId = await ResolveDefaultOrganizationPublicIdAsync(user.Id);
+        var newAccessToken = _jwtTokenGenerator.GenerateAccessToken(user.Id, user.Email, organizationPublicId);
         var newRefreshTokenValue = _jwtTokenGenerator.GenerateRefreshToken();
         var newRefreshTokenHash = _tokenHasher.HashToken(newRefreshTokenValue);
 
@@ -170,12 +207,12 @@ public class AuthService : IAuthService
         return (newAccessToken, newRefreshTokenValue);
     }
 
-    public async Task LogoutAsync(string refreshTokenValue)
+    public async Task LogoutAsync(int userId, string refreshTokenValue)
     {
         var tokenHash = _tokenHasher.HashToken(refreshTokenValue);
         var refreshToken = await _unitOfWork.RefreshTokens.GetByTokenAsync(tokenHash);
 
-        if (refreshToken != null)
+        if (refreshToken != null && refreshToken.UserId == userId)
         {
             refreshToken.IsRevoked = true;
             refreshToken.RevokedAt = DateTime.UtcNow;
@@ -198,51 +235,35 @@ public class AuthService : IAuthService
         var user = await _unitOfWork.Users.GetByEmailAsync(email.ToLower());
         if (user != null)
         {
-            var token = Guid.NewGuid().ToString();
-            var tokenHash = _tokenHasher.HashToken(token);
-
-            var resetToken = new PasswordResetToken
+            var credentials = await _unitOfWork.UserCredentials.GetByUserIdAsync(user.Id);
+            if (credentials != null && !string.IsNullOrWhiteSpace(credentials.PasswordHash))
             {
-                UserId = user.Id,
-                TokenHash = tokenHash,
-                ExpiresAt = DateTime.UtcNow.AddHours(AuthConstants.PasswordResetTokenLifetimeHours) // Configurable
-            };
-
-            await _unitOfWork.PasswordResetTokens.CreateAsync(resetToken);
-
-            // Send password reset email
-            var verificationModel = new VerificationCodeModel
-            {
-                Name = user.Name ?? "User",
-                OTP = token // Using the plain token as OTP for password reset
-            };
-            _sendMailService.EnqueueVerificationCodeEmail(user.Email, verificationModel);
-
-            await _unitOfWork.SaveChangesAsync();
+                await SendOtpAsync(user);
+            }
         }
         // Always return success to prevent email enumeration
     }
 
-    public async Task ResetPasswordAsync(string token, string newPassword)
+    public async Task ResetPasswordAsync(string email, string otp, string newPassword)
     {
-        var tokenHash = _tokenHasher.HashToken(token);
-        var resetToken = await _unitOfWork.PasswordResetTokens.GetByTokenHashAsync(tokenHash);
-
-        if (resetToken == null)
-        {
-            throw new InvalidOperationException("Invalid or expired token.");
-        }
-
-        var user = await _unitOfWork.Users.GetByIdAsync(resetToken.UserId);
+        var user = await _unitOfWork.Users.GetByEmailAsync(email.ToLower());
         if (user == null)
         {
-            throw new InvalidOperationException("User not found.");
+            throw new InvalidOperationException("Invalid or expired OTP.");
         }
 
         var credentials = await _unitOfWork.UserCredentials.GetByUserIdAsync(user.Id);
         if (credentials == null)
         {
-            throw new InvalidOperationException("User credentials not found.");
+            throw new InvalidOperationException("Invalid or expired OTP.");
+        }
+
+        var tokenHash = _tokenHasher.HashToken(otp);
+        var resetToken = await _unitOfWork.PasswordResetTokens.GetByUserAndTokenHashAsync(user.Id, tokenHash);
+
+        if (resetToken == null || resetToken.UserId != user.Id)
+        {
+            throw new InvalidOperationException("Invalid or expired OTP.");
         }
 
         credentials.PasswordHash = _passwordHasher.HashPassword(newPassword);
@@ -260,6 +281,150 @@ public class AuthService : IAuthService
 
         await _unitOfWork.SaveChangesAsync();
     }
+
+    public async Task<(User user, string accessToken, string refreshToken)> CompleteFirstAccessAsync(string email, string otp, string newPassword, string firstName, string lastName, string ipAddress, string userAgent)
+    {
+        var user = await _unitOfWork.Users.GetByEmailAsync(email.ToLower());
+        if (user == null)
+        {
+            throw new InvalidOperationException("Invalid or expired OTP.");
+        }
+
+        var credentials = await _unitOfWork.UserCredentials.GetByUserIdAsync(user.Id);
+        if (credentials != null && !string.IsNullOrWhiteSpace(credentials.PasswordHash))
+        {
+            throw new InvalidOperationException("First access has already been completed.");
+        }
+
+        var tokenHash = _tokenHasher.HashToken(otp);
+        var resetToken = await _unitOfWork.PasswordResetTokens.GetByUserAndTokenHashAsync(user.Id, tokenHash);
+        if (resetToken == null || resetToken.UserId != user.Id)
+        {
+            throw new InvalidOperationException("Invalid or expired OTP.");
+        }
+
+        if (credentials == null)
+        {
+            credentials = new UserCredentials
+            {
+                UserId = user.Id,
+                PasswordHash = _passwordHasher.HashPassword(newPassword)
+            };
+            await _unitOfWork.UserCredentials.CreateAsync(credentials);
+        }
+        else
+        {
+            credentials.PasswordHash = _passwordHasher.HashPassword(newPassword);
+            await _unitOfWork.UserCredentials.UpdateAsync(credentials);
+        }
+
+        var fullName = $"{firstName.Trim()} {lastName.Trim()}".Trim();
+        user.Name = fullName;
+        user.AvatarUrl = AvatarHelper.GenerateUserAvatar(fullName);
+        await _unitOfWork.Users.UpdateAsync(user);
+
+        resetToken.IsUsed = true;
+        resetToken.UsedAt = DateTime.UtcNow;
+        await _unitOfWork.PasswordResetTokens.UpdateAsync(resetToken);
+
+        var (accessToken, refreshToken) = await CreateSessionAsync(user, userAgent);
+
+        await LogAuditEvent(user.Id, AuditEventTypes.Login, ipAddress, userAgent);
+        await _unitOfWork.SaveChangesAsync();
+
+        return (user, accessToken, refreshToken);
+    }
+
+    public async Task ResendFirstAccessOtpAsync(string email)
+    {
+        var user = await _unitOfWork.Users.GetByEmailAsync(email.ToLower());
+        if (user == null)
+        {
+            return;
+        }
+
+        var credentials = await _unitOfWork.UserCredentials.GetByUserIdAsync(user.Id);
+        if (credentials != null && !string.IsNullOrWhiteSpace(credentials.PasswordHash))
+        {
+            return;
+        }
+
+        await SendOtpAsync(user);
+    }
+
+    private async Task<(string accessToken, string refreshToken)> CreateSessionAsync(User user, string userAgent)
+    {
+        var organizationPublicId = await ResolveDefaultOrganizationPublicIdAsync(user.Id);
+        var accessToken = _jwtTokenGenerator.GenerateAccessToken(user.Id, user.Email, organizationPublicId);
+        var refreshTokenValue = _jwtTokenGenerator.GenerateRefreshToken();
+        var refreshTokenHash = _tokenHasher.HashToken(refreshTokenValue);
+
+        var refreshToken = new RefreshToken
+        {
+            UserId = user.Id,
+            Token = refreshTokenHash,
+            ExpiresAt = DateTime.UtcNow.AddDays(AuthConstants.RefreshTokenLifetimeDays),
+            DeviceInfo = userAgent
+        };
+
+        await _unitOfWork.RefreshTokens.CreateAsync(refreshToken);
+        return (accessToken, refreshTokenValue);
+    }
+
+    private async Task SendOtpAsync(User user)
+    {
+        var otp = GenerateOtp();
+        var tokenHash = _tokenHasher.HashToken(otp);
+
+        var resetToken = new PasswordResetToken
+        {
+            UserId = user.Id,
+            TokenHash = tokenHash,
+            ExpiresAt = DateTime.UtcNow.AddHours(AuthConstants.PasswordResetTokenLifetimeHours)
+        };
+
+        await _unitOfWork.PasswordResetTokens.CreateAsync(resetToken);
+
+        var verificationModel = new VerificationCodeModel
+        {
+            Name = user.Name ?? "User",
+            OTP = otp
+        };
+        _sendMailService.EnqueueVerificationCodeEmail(user.Email, verificationModel);
+
+        await _unitOfWork.SaveChangesAsync();
+    }
+
+    private static string GenerateOtp()
+    {
+        return RandomNumberGenerator.GetInt32(0, 1000000).ToString("D6");
+    }
+
+    private static string MaskEmail(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
+        {
+            return "***";
+        }
+
+        var parts = email.Split('@', 2);
+        var local = parts[0];
+        var domain = parts[1];
+
+        if (local.Length <= 2)
+        {
+            return $"**@{domain}";
+        }
+
+        return $"{local[0]}***{local[^1]}@{domain}";
+    }
+
+    private async Task<Guid?> ResolveDefaultOrganizationPublicIdAsync(int userId)
+    {
+        var membership = await _unitOfWork.CompanyMembers.GetByUserIdAsync(userId);
+        return membership?.Company?.PublicId;
+    }
+
     private async Task LogAuditEvent(int userId, string eventType, string? ipAddress, string? userAgent)
     {
         if (userId <= 0)

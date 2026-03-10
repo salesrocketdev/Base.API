@@ -1,3 +1,5 @@
+using Base.Domain.Interfaces.Repositories;
+
 namespace Base.Domain.Interfaces;
 
 public interface IUnitOfWork : IDisposable
