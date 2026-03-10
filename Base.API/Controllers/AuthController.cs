@@ -24,7 +24,7 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var user = await _authService.RegisterAsync(request.Email, request.Password, request.Name);
+            await _authService.RegisterAsync(request.Email, request.Password, request.Name);
             return Ok(ApiResponse<object?>.Ok(null, "User registered successfully"));
         }
         catch (InvalidOperationException ex)
@@ -50,7 +50,7 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? ApiConstants.UnknownIpAddress; // TODO: Ensure proper IP extraction in production (consider X-Forwarded-For if behind proxy)
+            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? ApiConstants.UnknownIpAddress;
             var userAgent = HttpContext.Request.Headers["User-Agent"].ToString();
 
             var (user, accessToken, refreshToken) = await _authService.LoginAsync(request.Email, request.Password, ipAddress, userAgent);
@@ -58,7 +58,7 @@ public class AuthController : ControllerBase
             var response = new LoginResponse(
                 accessToken,
                 refreshToken,
-                new UserSummary(user.PublicId, user.Email, user.Name)
+                new UserSummary(user.PublicId, user.Email, user.Name, user.AvatarUrl)
             );
 
             return Ok(ApiResponse<LoginResponse>.Ok(response));
@@ -163,7 +163,7 @@ public class AuthController : ControllerBase
             ));
         }
 
-        return Ok(ApiResponse<UserSummary>.Ok(new UserSummary(user.PublicId, user.Email, user.Name)));
+        return Ok(ApiResponse<UserSummary>.Ok(new UserSummary(user.PublicId, user.Email, user.Name, user.AvatarUrl)));
     }
 
     [HttpPost("forgot-password")]
@@ -214,7 +214,7 @@ public class AuthController : ControllerBase
             var response = new LoginResponse(
                 accessToken,
                 refreshToken,
-                new UserSummary(user.PublicId, user.Email, user.Name)
+                new UserSummary(user.PublicId, user.Email, user.Name, user.AvatarUrl)
             );
 
             return Ok(ApiResponse<LoginResponse>.Ok(response));
@@ -236,5 +236,3 @@ public class AuthController : ControllerBase
         return Ok(ApiResponse<object?>.Ok(null, "If the email exists, an OTP has been sent."));
     }
 }
-
-

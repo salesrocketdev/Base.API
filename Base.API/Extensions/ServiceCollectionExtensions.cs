@@ -26,7 +26,6 @@ public static class ServiceCollectionExtensions
     {
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"))
-                   // We run migrations via the migrator container. Avoid crashing the API on model drift.
                    .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
 
         return services;
@@ -36,6 +35,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
         services.AddScoped<ITokenHasher, Sha256TokenHasher>();
+        services.AddScoped<IPasswordResetOtpProtector, PasswordResetOtpProtector>();
         services.AddScoped<IJwtTokenGenerator>(sp =>
         {
             var config = sp.GetRequiredService<IConfiguration>();
@@ -130,27 +130,30 @@ public static class ServiceCollectionExtensions
             return services;
         }
 
-        var storage = configuration.GetValue<string>("Hangfire:Storage") ?? "InMemory";
-        var connectionString = configuration["Hangfire:ConnectionString"] ?? configuration.GetConnectionString("DefaultConnection");
+        var storage = configuration["Hangfire:Storage"] ?? "PostgreSql";
+        var hangfireConnection = configuration.GetConnectionString("HangfireConnection")
+            ?? configuration["Hangfire:ConnectionString"]
+            ?? configuration.GetConnectionString("DefaultConnection");
 
         services.AddHangfire(config =>
         {
-            config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+            config
+                .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
                 .UseSimpleAssemblyNameTypeSerializer()
                 .UseRecommendedSerializerSettings();
 
-            if (string.Equals(storage, "PostgreSql", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(storage, "InMemory", StringComparison.OrdinalIgnoreCase))
             {
-                if (string.IsNullOrWhiteSpace(connectionString))
-                {
-                    throw new InvalidOperationException("Hangfire storage is PostgreSql but no connection string was provided.");
-                }
-
-                config.UsePostgreSqlStorage(options => options.UseNpgsqlConnection(connectionString));
+                config.UseInMemoryStorage();
                 return;
             }
 
-            config.UseInMemoryStorage();
+            if (string.IsNullOrWhiteSpace(hangfireConnection))
+            {
+                throw new InvalidOperationException("Hangfire PostgreSQL storage requires Hangfire:ConnectionString or ConnectionStrings:DefaultConnection.");
+            }
+
+            config.UsePostgreSqlStorage(options => options.UseNpgsqlConnection(hangfireConnection));
         });
 
         services.AddHangfireServer();
@@ -173,4 +176,3 @@ public static class ServiceCollectionExtensions
         return services;
     }
 }
-

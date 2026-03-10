@@ -11,11 +11,7 @@ services:
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER:-base} -d ${POSTGRES_DB:-base_db}",
-        ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-base} -d ${POSTGRES_DB:-base_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -40,23 +36,21 @@ services:
       dockerfile: Base.API/Dockerfile
     ports:
       - "5000:80" # HTTP
-      - "5001:443" # HTTPS (requires certs / reverse proxy in front)
+      - "5001:443" # HTTPS
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ASPNETCORE_URLS: "http://+:80"
       Database__ApplyMigrationsOnStartup: "false"
-      # Connection string: prefer using environment variables or Docker secrets in production
       ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable"
       DEFAULT_CONNECTION: "Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable"
-      # Optional: disable app-level HTTPS redirection when using an external HTTPS reverse-proxy
       DisableHttpsRedirection: "true"
-      # Security / secret values should be supplied securely in production
       JWT__SecretKey: "${JWT__SECRETKEY}"
       JWT__Issuer: "${JWT__ISSUER}"
       JWT__Audience: "${JWT__AUDIENCE}"
       JWT__AccessTokenExpirationMinutes: "${JWT__ACCESSTOKENEXPIRATIONMINUTES}"
       JWT__RefreshTokenExpirationDays: "${JWT__REFRESHTOKENEXPIRATIONDAYS}"
       Security__PasswordHashing__Iterations: "${SECURITY__PASSWORDHASHING__ITERATIONS}"
+      Security__PasswordReset__Pepper: "${SECURITY__PASSWORDRESET__PEPPER}"
       Seed__Enabled: "${SEED__ENABLED:-false}"
       Seed__Scenario: "${SEED__SCENARIO:-base}"
       Seed__ResetBeforeSeed: "${SEED__RESETBEFORESEED:-false}"
@@ -68,7 +62,6 @@ services:
       Seed__LearnerName: "${SEED__LEARNERNAME:-Learner}"
       Seed__OrganizationName: "${SEED__ORGANIZATIONNAME:-Eradia Demo}"
       Seed__OrganizationSlug: "${SEED__ORGANIZATIONSLUG:-eradia-demo}"
-      Security__PasswordReset__Pepper: "${SECURITY__PASSWORDRESET__PEPPER}"
       ZeptoMailSettings__Token: "${ZEPTOMAILSETTINGS__TOKEN}"
       ZeptoMailSettings__FromAddress: "${ZEPTOMAILSETTINGS__FROMADDRESS:-noreply@base.local}"
       ZeptoMailSettings__FromName: "${ZEPTOMAILSETTINGS__FROMNAME:-Eradia}"

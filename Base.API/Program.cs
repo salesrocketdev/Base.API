@@ -1,6 +1,7 @@
 using AspNetCoreRateLimit;
 using Hangfire;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Base.API.Extensions;
@@ -67,12 +68,17 @@ builder.Services.AddApplicationCors(builder.Configuration);
 // Controllers
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+});
 
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 if (!app.Configuration.GetValue<bool>("DisableHttpsRedirection"))
 {
+    app.UseHsts();
     app.UseHttpsRedirection();
 }
 
@@ -83,6 +89,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseSerilogRequestLogging();
+app.UseForwardedHeaders();
 
 // Security headers
 app.Use(async (context, next) =>

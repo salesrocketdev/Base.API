@@ -4,6 +4,6 @@ namespace Base.Domain.Interfaces.Repositories;
 
 public interface IPasswordResetTokenRepository : IBaseRepository<PasswordResetToken>
 {
-    Task<PasswordResetToken?> GetByUserAndTokenHashAsync(int userId, string tokenHash);
+    Task<PasswordResetToken?> GetByUserIdAndTokenHashAsync(int userId, string tokenHash);
+    Task InvalidateActiveTokensByUserIdAsync(int userId);
 }
-

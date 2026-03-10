@@ -88,7 +88,7 @@ public class AuthControllerTests
         public Task<string> SwitchOrganizationAsync(int userId, Guid organizationPublicId)
             => Task.FromResult("access");
 
-        public Task LogoutAsync(int userId, string refreshTokenValue) => Task.CompletedTask;
+        public Task LogoutAsync(int currentUserId, string refreshTokenValue) => Task.CompletedTask;
 
         public Task<User?> GetCurrentUserAsync(int userId)
             => Task.FromResult<User?>(new User { Id = userId, Email = "user@test.local", CompanyId = 1 });

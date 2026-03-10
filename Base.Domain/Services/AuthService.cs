@@ -16,14 +16,22 @@ public class AuthService : IAuthService
     private readonly IPasswordHasher _passwordHasher;
     private readonly IJwtTokenGenerator _jwtTokenGenerator;
     private readonly ITokenHasher _tokenHasher;
+    private readonly IPasswordResetOtpProtector _passwordResetOtpProtector;
     private readonly ISendMailService _sendMailService;
 
-    public AuthService(IUnitOfWork unitOfWork, IPasswordHasher passwordHasher, IJwtTokenGenerator jwtTokenGenerator, ITokenHasher tokenHasher, ISendMailService sendMailService)
+    public AuthService(
+        IUnitOfWork unitOfWork,
+        IPasswordHasher passwordHasher,
+        IJwtTokenGenerator jwtTokenGenerator,
+        ITokenHasher tokenHasher,
+        IPasswordResetOtpProtector passwordResetOtpProtector,
+        ISendMailService sendMailService)
     {
         _unitOfWork = unitOfWork;
         _passwordHasher = passwordHasher;
         _jwtTokenGenerator = jwtTokenGenerator;
         _tokenHasher = tokenHasher;
+        _passwordResetOtpProtector = passwordResetOtpProtector;
         _sendMailService = sendMailService;
     }
 
@@ -34,7 +42,6 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("Unable to create account. Please try again.");
         }
 
-        // Create company first
         var company = new Company
         {
             Name = $"{name ?? email.Split('@')[0]}'s Company",
@@ -63,7 +70,6 @@ public class AuthService : IAuthService
 
         await _unitOfWork.UserCredentials.CreateAsync(credentials);
 
-        // Create company membership
         var companyMember = new CompanyMember
         {
             Company = company,
@@ -73,17 +79,14 @@ public class AuthService : IAuthService
         };
 
         await _unitOfWork.CompanyMembers.CreateAsync(companyMember);
-
         await _unitOfWork.SaveChangesAsync();
 
-        // Audit
         await LogAuditEvent(user.Id, AuditEventTypes.Signup, null, null);
 
-        // Send welcome email
         var welcomeModel = new WelcomeModel
         {
             Name = user.Name ?? "User",
-            LastName = "" // TODO: Add LastName field to User entity if needed
+            LastName = ""
         };
         _sendMailService.EnqueueWelcomeEmail(user.Email, welcomeModel);
 
@@ -115,7 +118,6 @@ public class AuthService : IAuthService
         var user = await _unitOfWork.Users.GetByEmailAsync(email.ToLower());
         if (user == null)
         {
-            // Audit failed login
             await LogAuditEvent(AuthConstants.UnknownUserId, AuditEventTypes.LoginFailed, ipAddress, userAgent);
             throw new UnauthorizedAccessException("Invalid credentials.");
         }
@@ -128,16 +130,13 @@ public class AuthService : IAuthService
 
         if (!_passwordHasher.VerifyPassword(credentials.PasswordHash, password))
         {
-            // Audit failed login
             await LogAuditEvent(user.Id, AuditEventTypes.LoginFailed, ipAddress, userAgent);
             throw new UnauthorizedAccessException("Invalid credentials.");
         }
 
         var (accessToken, refreshTokenValue) = await CreateSessionAsync(user, userAgent);
 
-        // Audit
         await LogAuditEvent(user.Id, AuditEventTypes.Login, ipAddress, userAgent);
-
         await _unitOfWork.SaveChangesAsync();
 
         return (user, accessToken, refreshTokenValue);
@@ -176,7 +175,6 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Invalid or expired refresh token.");
         }
 
-        // Rotate token
         refreshToken.IsRevoked = true;
         refreshToken.RevokedAt = DateTime.UtcNow;
         await _unitOfWork.RefreshTokens.UpdateAsync(refreshToken);
@@ -201,26 +199,23 @@ public class AuthService : IAuthService
         };
 
         await _unitOfWork.RefreshTokens.CreateAsync(newRefreshToken);
-
         await _unitOfWork.SaveChangesAsync();
 
         return (newAccessToken, newRefreshTokenValue);
     }
 
-    public async Task LogoutAsync(int userId, string refreshTokenValue)
+    public async Task LogoutAsync(int currentUserId, string refreshTokenValue)
     {
         var tokenHash = _tokenHasher.HashToken(refreshTokenValue);
         var refreshToken = await _unitOfWork.RefreshTokens.GetByTokenAsync(tokenHash);
 
-        if (refreshToken != null && refreshToken.UserId == userId)
+        if (refreshToken != null && refreshToken.UserId == currentUserId)
         {
             refreshToken.IsRevoked = true;
             refreshToken.RevokedAt = DateTime.UtcNow;
             await _unitOfWork.RefreshTokens.UpdateAsync(refreshToken);
 
-            // Audit
             await LogAuditEvent(refreshToken.UserId, AuditEventTypes.Logout, null, null);
-
             await _unitOfWork.SaveChangesAsync();
         }
     }
@@ -241,7 +236,6 @@ public class AuthService : IAuthService
                 await SendOtpAsync(user);
             }
         }
-        // Always return success to prevent email enumeration
     }
 
     public async Task ResetPasswordAsync(string email, string otp, string newPassword)
@@ -252,16 +246,15 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("Invalid or expired OTP.");
         }
 
-        var credentials = await _unitOfWork.UserCredentials.GetByUserIdAsync(user.Id);
-        if (credentials == null)
+        var tokenHash = _passwordResetOtpProtector.HashOtp(user.Id, otp);
+        var resetToken = await _unitOfWork.PasswordResetTokens.GetByUserIdAndTokenHashAsync(user.Id, tokenHash);
+        if (resetToken == null)
         {
             throw new InvalidOperationException("Invalid or expired OTP.");
         }
 
-        var tokenHash = _tokenHasher.HashToken(otp);
-        var resetToken = await _unitOfWork.PasswordResetTokens.GetByUserAndTokenHashAsync(user.Id, tokenHash);
-
-        if (resetToken == null || resetToken.UserId != user.Id)
+        var credentials = await _unitOfWork.UserCredentials.GetByUserIdAsync(user.Id);
+        if (credentials == null)
         {
             throw new InvalidOperationException("Invalid or expired OTP.");
         }
@@ -273,10 +266,7 @@ public class AuthService : IAuthService
         resetToken.UsedAt = DateTime.UtcNow;
         await _unitOfWork.PasswordResetTokens.UpdateAsync(resetToken);
 
-        // Revoke all refresh tokens
         await _unitOfWork.RefreshTokens.RevokeAllTokensByUserIdAsync(user.Id);
-
-        // Audit
         await LogAuditEvent(user.Id, AuditEventTypes.ResetPassword, null, null);
 
         await _unitOfWork.SaveChangesAsync();
@@ -296,9 +286,9 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("First access has already been completed.");
         }
 
-        var tokenHash = _tokenHasher.HashToken(otp);
-        var resetToken = await _unitOfWork.PasswordResetTokens.GetByUserAndTokenHashAsync(user.Id, tokenHash);
-        if (resetToken == null || resetToken.UserId != user.Id)
+        var tokenHash = _passwordResetOtpProtector.HashOtp(user.Id, otp);
+        var resetToken = await _unitOfWork.PasswordResetTokens.GetByUserIdAndTokenHashAsync(user.Id, tokenHash);
+        if (resetToken == null)
         {
             throw new InvalidOperationException("Invalid or expired OTP.");
         }
@@ -373,14 +363,16 @@ public class AuthService : IAuthService
 
     private async Task SendOtpAsync(User user)
     {
-        var otp = GenerateOtp();
-        var tokenHash = _tokenHasher.HashToken(otp);
+        var otp = GenerateOtpCode();
+        var tokenHash = _passwordResetOtpProtector.HashOtp(user.Id, otp);
+
+        await _unitOfWork.PasswordResetTokens.InvalidateActiveTokensByUserIdAsync(user.Id);
 
         var resetToken = new PasswordResetToken
         {
             UserId = user.Id,
             TokenHash = tokenHash,
-            ExpiresAt = DateTime.UtcNow.AddHours(AuthConstants.PasswordResetTokenLifetimeHours)
+            ExpiresAt = DateTime.UtcNow.AddMinutes(AuthConstants.PasswordResetOtpLifetimeMinutes)
         };
 
         await _unitOfWork.PasswordResetTokens.CreateAsync(resetToken);
@@ -388,16 +380,19 @@ public class AuthService : IAuthService
         var verificationModel = new VerificationCodeModel
         {
             Name = user.Name ?? "User",
-            OTP = otp
+            OTP = otp,
+            ExpirationMinutes = AuthConstants.PasswordResetOtpLifetimeMinutes
         };
         _sendMailService.EnqueueVerificationCodeEmail(user.Email, verificationModel);
 
         await _unitOfWork.SaveChangesAsync();
     }
 
-    private static string GenerateOtp()
+    private static string GenerateOtpCode()
     {
-        return RandomNumberGenerator.GetInt32(0, 1000000).ToString("D6");
+        var maxExclusive = (int)Math.Pow(10, AuthConstants.PasswordResetOtpLength);
+        var value = RandomNumberGenerator.GetInt32(0, maxExclusive);
+        return value.ToString($"D{AuthConstants.PasswordResetOtpLength}");
     }
 
     private static string MaskEmail(string email)
@@ -443,5 +438,3 @@ public class AuthService : IAuthService
         await _unitOfWork.AuditEvents.CreateAsync(auditEvent);
     }
 }
-
-

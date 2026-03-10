@@ -1,4 +1,4 @@
-﻿# Base API Boilerplate (.NET 10)
+# Base API Boilerplate (.NET 10)
 
 Boilerplate de API multi-tenant com JWT, PostgreSQL, EF Core e fluxo base de autenticacao e company.
 
