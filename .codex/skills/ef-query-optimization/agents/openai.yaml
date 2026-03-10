@@ -1,0 +1,4 @@
+interface_version: 1
+display_name: EF Query Optimization
+short_description: Detectar e otimizar queries EF/SQL com foco em performance, tenancy e segurança
+default_prompt: Use o skill EF Query Optimization para analisar repositórios/serviços/DbContext, detectar anti-patterns de consultas (GetAll+filtro em memória, N+1, overfetch, predicates não sargáveis, falta de tenant filter) e aplicar otimizações seguras com validação.
