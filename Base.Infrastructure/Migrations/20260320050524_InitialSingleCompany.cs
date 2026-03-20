@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -7,7 +7,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Base.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialBoilerplate : Migration
+    public partial class InitialSingleCompany : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -20,6 +20,7 @@ namespace Base.Infrastructure.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     Settings = table.Column<string>(type: "jsonb", nullable: true),
+                    NameNormalized = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     PublicId = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
                     IsDeleted = table.Column<bool>(type: "boolean", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -281,9 +282,9 @@ namespace Base.Infrastructure.Migrations
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Companies_Name",
+                name: "IX_Companies_NameNormalized",
                 table: "Companies",
-                column: "Name",
+                column: "NameNormalized",
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -317,9 +318,9 @@ namespace Base.Infrastructure.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_PasswordResetTokens_UserId",
+                name: "IX_PasswordResetTokens_UserId_TokenHash_IsUsed",
                 table: "PasswordResetTokens",
-                column: "UserId");
+                columns: new[] { "UserId", "TokenHash", "IsUsed" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_RefreshTokens_PublicId",
@@ -328,9 +329,15 @@ namespace Base.Infrastructure.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_RefreshTokens_UserId",
+                name: "IX_RefreshTokens_Token",
                 table: "RefreshTokens",
-                column: "UserId");
+                column: "Token",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RefreshTokens_UserId_IsRevoked_ExpiresAt",
+                table: "RefreshTokens",
+                columns: new[] { "UserId", "IsRevoked", "ExpiresAt" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_UserCredentials_PublicId",
@@ -391,4 +398,3 @@ namespace Base.Infrastructure.Migrations
         }
     }
 }
-

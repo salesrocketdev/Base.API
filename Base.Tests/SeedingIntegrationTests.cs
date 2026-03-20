@@ -29,6 +29,13 @@ public class SeedingIntegrationTests
                 ["Seed:AdminEmail"] = "admin@base.local",
                 ["Seed:AdminPassword"] = "StrongPassword!123",
                 ["Seed:AdminName"] = "Administrator",
+                ["Security:PasswordHashing:TimeCost"] = "1",
+                ["Security:PasswordHashing:MemoryCost"] = "1024",
+                ["Security:PasswordHashing:Lanes"] = "1",
+                ["Security:PasswordHashing:Threads"] = "1",
+                ["Security:PasswordHashing:HashLength"] = "16",
+                ["Security:PasswordHashing:SaltLength"] = "16",
+                ["Security:PasswordHashing:Pepper"] = "test-password-pepper-1234567890",
                 ["Security:PasswordHashing:Iterations"] = "1000"
             })
             .Build();
@@ -36,7 +43,7 @@ public class SeedingIntegrationTests
         await using var db = new ApplicationDbContext(options);
         await db.Database.EnsureCreatedAsync();
 
-        var hasher = new Pbkdf2PasswordHasher(configuration);
+        var hasher = new HybridPasswordHasher(new Argon2idPasswordHasher(configuration), new Pbkdf2PasswordHasher(configuration));
         var companySeeder = new CompanySeeder(db, configuration, NullLogger<CompanySeeder>.Instance);
         var userSeeder = new UserSeeder(db, hasher, configuration);
 
@@ -50,5 +57,8 @@ public class SeedingIntegrationTests
         Assert.Equal(1, await db.Users.CountAsync());
         Assert.Equal(1, await db.UserCredentials.CountAsync());
         Assert.Equal(1, await db.CompanyMembers.CountAsync());
+
+        var credentials = await db.UserCredentials.SingleAsync();
+        Assert.StartsWith("$argon2id$", credentials.PasswordHash);
     }
 }

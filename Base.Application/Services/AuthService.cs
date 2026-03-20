@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Base.Core.Email;
 using Base.Core.Email.Models;
 using Base.Core.Helpers;
@@ -5,10 +6,9 @@ using Base.Core.Security;
 using Base.Domain.Constants;
 using Base.Domain.Entities;
 using Base.Domain.Interfaces;
-using Base.Domain.Interfaces.Services;
-using System.Security.Cryptography;
+using Base.Application.Interfaces.Services;
 
-namespace Base.Domain.Services;
+namespace Base.Application.Services;
 
 public class AuthService : IAuthService
 {
@@ -128,10 +128,17 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("First access completion is required.");
         }
 
-        if (!_passwordHasher.VerifyPassword(credentials.PasswordHash, password))
+        var verificationResult = _passwordHasher.VerifyPassword(credentials.PasswordHash, password);
+        if (!verificationResult.Succeeded)
         {
             await LogAuditEvent(user.Id, AuditEventTypes.LoginFailed, ipAddress, userAgent);
             throw new UnauthorizedAccessException("Invalid credentials.");
+        }
+
+        if (verificationResult.NeedsRehash)
+        {
+            credentials.PasswordHash = _passwordHasher.HashPassword(password);
+            await _unitOfWork.UserCredentials.UpdateAsync(credentials);
         }
 
         var (accessToken, refreshTokenValue) = await CreateSessionAsync(user, userAgent);
@@ -140,29 +147,6 @@ public class AuthService : IAuthService
         await _unitOfWork.SaveChangesAsync();
 
         return (user, accessToken, refreshTokenValue);
-    }
-
-    public async Task<string> SwitchOrganizationAsync(int userId, Guid organizationPublicId)
-    {
-        var company = await _unitOfWork.Companies.GetByPublicIdAsync(organizationPublicId);
-        if (company == null)
-        {
-            throw new UnauthorizedAccessException("No active organization found for user.");
-        }
-
-        var membership = await _unitOfWork.CompanyMembers.GetByCompanyAndUserIdAsync(company.Id, userId);
-        if (membership == null)
-        {
-            throw new UnauthorizedAccessException("No active organization found for user.");
-        }
-
-        var user = await _unitOfWork.Users.GetByIdAsync(userId);
-        if (user == null)
-        {
-            throw new UnauthorizedAccessException("Invalid token.");
-        }
-
-        return _jwtTokenGenerator.GenerateAccessToken(user.Id, user.Email, company.PublicId);
     }
 
     public async Task<(string accessToken, string refreshToken)> RefreshTokenAsync(string refreshTokenValue)
@@ -185,8 +169,7 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("User not found.");
         }
 
-        var organizationPublicId = await ResolveDefaultOrganizationPublicIdAsync(user.Id);
-        var newAccessToken = _jwtTokenGenerator.GenerateAccessToken(user.Id, user.Email, organizationPublicId);
+        var newAccessToken = _jwtTokenGenerator.GenerateAccessToken(user.Id, user.Email);
         var newRefreshTokenValue = _jwtTokenGenerator.GenerateRefreshToken();
         var newRefreshTokenHash = _tokenHasher.HashToken(newRefreshTokenValue);
 
@@ -344,8 +327,7 @@ public class AuthService : IAuthService
 
     private async Task<(string accessToken, string refreshToken)> CreateSessionAsync(User user, string userAgent)
     {
-        var organizationPublicId = await ResolveDefaultOrganizationPublicIdAsync(user.Id);
-        var accessToken = _jwtTokenGenerator.GenerateAccessToken(user.Id, user.Email, organizationPublicId);
+        var accessToken = _jwtTokenGenerator.GenerateAccessToken(user.Id, user.Email);
         var refreshTokenValue = _jwtTokenGenerator.GenerateRefreshToken();
         var refreshTokenHash = _tokenHasher.HashToken(refreshTokenValue);
 
@@ -412,12 +394,6 @@ public class AuthService : IAuthService
         }
 
         return $"{local[0]}***{local[^1]}@{domain}";
-    }
-
-    private async Task<Guid?> ResolveDefaultOrganizationPublicIdAsync(int userId)
-    {
-        var membership = await _unitOfWork.CompanyMembers.GetByUserIdAsync(userId);
-        return membership?.Company?.PublicId;
     }
 
     private async Task LogAuditEvent(int userId, string eventType, string? ipAddress, string? userAgent)

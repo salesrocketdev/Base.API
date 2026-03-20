@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Base.API.Constants;
 using Base.API.DTOs;
-using Base.Domain.Interfaces.Services;
+using Base.Application.Interfaces.Services;
 
 namespace Base.API.Controllers;
 
@@ -21,6 +21,15 @@ public class CompanyController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CompanyCreateRequest request)
     {
+        var existingCompanyId = HttpContext.Items["CompanyId"] as int? ?? 0;
+        if (existingCompanyId > 0)
+        {
+            return Conflict(ApiResponse<object?>.Fail(
+                "User already belongs to a company.",
+                new ApiError(ApiErrorCodes.InvalidOperation, "User already belongs to a company.", ApiErrorTypes.Validation)
+            ));
+        }
+
         var company = await _companyService.CreateAsync(request.Name, request.SettingsJson);
         var settings = company.Settings?.RootElement.GetRawText();
         var response = new CompanyResponse(company.PublicId, company.Name, settings, company.CreatedAt);
@@ -30,6 +39,12 @@ public class CompanyController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {
+        var tenantCheck = EnsureTenantCompany(id);
+        if (tenantCheck != null)
+        {
+            return tenantCheck;
+        }
+
         var company = await _companyService.GetByIdWithMembersAsync(id);
         if (company == null)
         {
@@ -167,8 +182,10 @@ public class CompanyController : ControllerBase
             return tenantCheck;
         }
 
-        await _companyService.DeleteAsync(id);
-        return Ok(ApiResponse<object?>.Ok(null, "Company deleted successfully."));
+        return BadRequest(ApiResponse<object?>.Fail(
+            "Deleting the current company is not supported in single-company mode.",
+            new ApiError(ApiErrorCodes.InvalidOperation, "Deleting the current company is not supported in single-company mode.", ApiErrorTypes.Validation)
+        ));
     }
 
     private IActionResult? EnsureManagementRole()

@@ -11,7 +11,9 @@ public class UserCredentialsRepository : BaseRepository<UserCredentials>, IUserC
 
     public async Task<UserCredentials?> GetByUserIdAsync(int userId)
     {
-        return await _context.UserCredentials.FirstOrDefaultAsync(uc => uc.UserId == userId);
+        return await _context.UserCredentials
+            .AsNoTracking()
+            .FirstOrDefaultAsync(uc => uc.UserId == userId);
     }
 }
 

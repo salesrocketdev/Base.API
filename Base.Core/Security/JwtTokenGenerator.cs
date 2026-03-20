@@ -25,7 +25,7 @@ public class JwtTokenGenerator : IJwtTokenGenerator
         _refreshTokenExpirationDays = refreshTokenExpirationDays;
     }
 
-    public string GenerateAccessToken(int userId, string email, Guid? organizationPublicId = null)
+    public string GenerateAccessToken(int userId, string email)
     {
         var claims = new List<Claim>
         {
@@ -34,11 +34,6 @@ public class JwtTokenGenerator : IJwtTokenGenerator
             new Claim(JwtRegisteredClaimNames.Email, email),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
-
-        if (organizationPublicId.HasValue && organizationPublicId.Value != Guid.Empty)
-        {
-            claims.Add(new Claim("org_pid", organizationPublicId.Value.ToString()));
-        }
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secretKey));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

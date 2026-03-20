@@ -2,8 +2,6 @@ services:
   db:
     image: postgres:16
     restart: always
-    ports:
-      - "5432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-base}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-base}
@@ -19,8 +17,6 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
@@ -35,10 +31,10 @@ services:
       context: .
       dockerfile: Base.API/Dockerfile
     ports:
-      - "5000:80" # HTTP
-      - "5001:443" # HTTPS
+      - "5000:80"
+      - "5001:443"
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_ENVIRONMENT: "Production"
       ASPNETCORE_URLS: "http://+:80"
       Database__ApplyMigrationsOnStartup: "false"
       ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable"
@@ -49,9 +45,15 @@ services:
       JWT__Audience: "${JWT__AUDIENCE}"
       JWT__AccessTokenExpirationMinutes: "${JWT__ACCESSTOKENEXPIRATIONMINUTES}"
       JWT__RefreshTokenExpirationDays: "${JWT__REFRESHTOKENEXPIRATIONDAYS}"
-      Security__PasswordHashing__Iterations: "${SECURITY__PASSWORDHASHING__ITERATIONS}"
+      Security__PasswordHashing__TimeCost: "${SECURITY__PASSWORDHASHING__TIMECOST}"
+      Security__PasswordHashing__MemoryCost: "${SECURITY__PASSWORDHASHING__MEMORYCOST}"
+      Security__PasswordHashing__Lanes: "${SECURITY__PASSWORDHASHING__LANES}"
+      Security__PasswordHashing__Threads: "${SECURITY__PASSWORDHASHING__THREADS}"
+      Security__PasswordHashing__HashLength: "${SECURITY__PASSWORDHASHING__HASHLENGTH}"
+      Security__PasswordHashing__SaltLength: "${SECURITY__PASSWORDHASHING__SALTLENGTH}"
+      Security__PasswordHashing__Pepper: "${SECURITY__PASSWORDHASHING__PEPPER}"
       Security__PasswordReset__Pepper: "${SECURITY__PASSWORDRESET__PEPPER}"
-      Seed__Enabled: "${SEED__ENABLED:-false}"
+      Seed__Enabled: "false"
       Seed__Scenario: "${SEED__SCENARIO:-base}"
       Seed__ResetBeforeSeed: "${SEED__RESETBEFORESEED:-false}"
       Seed__AdminEmail: "${SEED__ADMINEMAIL:-admin@base.local}"
@@ -60,16 +62,15 @@ services:
       Seed__LearnerEmail: "${SEED__LEARNEREMAIL:-learner@base.local}"
       Seed__LearnerPassword: "${SEED__LEARNERPASSWORD:-}"
       Seed__LearnerName: "${SEED__LEARNERNAME:-Learner}"
-      Seed__OrganizationName: "${SEED__ORGANIZATIONNAME:-Eradia Demo}"
-      Seed__OrganizationSlug: "${SEED__ORGANIZATIONSLUG:-eradia-demo}"
+      Seed__CompanyName: "${SEED__COMPANYNAME:-Boilerplate Demo}"
       ZeptoMailSettings__Token: "${ZEPTOMAILSETTINGS__TOKEN}"
       ZeptoMailSettings__FromAddress: "${ZEPTOMAILSETTINGS__FROMADDRESS:-noreply@base.local}"
-      ZeptoMailSettings__FromName: "${ZEPTOMAILSETTINGS__FROMNAME:-Eradia}"
+      ZeptoMailSettings__FromName: "${ZEPTOMAILSETTINGS__FROMNAME:-Boilerplate}"
       Hangfire__Storage: "${HANGFIRE__STORAGE:-PostgreSql}"
       Hangfire__ConnectionString: "${HANGFIRE__CONNECTIONSTRING:-Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable}"
       Redis__Enabled: "${REDIS__ENABLED:-true}"
       Redis__ConnectionString: "${REDIS__CONNECTIONSTRING:-redis:6379}"
-      Redis__InstanceName: "${REDIS__INSTANCENAME:-eradia}"
+      Redis__InstanceName: "${REDIS__INSTANCENAME:-boilerplate}"
       Fcm__Enabled: "${FCM__ENABLED:-false}"
       Fcm__ProjectId: "${FCM__PROJECTID:-}"
       Fcm__ServiceAccountJson: "${FCM__SERVICEACCOUNTJSON:-}"
@@ -92,12 +93,13 @@ services:
     working_dir: /src
     volumes:
       - ./:/src
-    command: ["bash", "-lc", "/src/scripts/ef-migrate.sh"]
+    command: ["bash", "/src/scripts/ef-migrate.sh"]
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_ENVIRONMENT: "Production"
       ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable"
       DEFAULT_CONNECTION: "Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable"
       DOTNET_EF: "1"
+      EF_VALIDATE_PENDING_MODEL_CHANGES: "${EF_VALIDATE_PENDING_MODEL_CHANGES:-false}"
     depends_on:
       db:
         condition: service_healthy

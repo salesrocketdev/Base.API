@@ -1,4 +1,3 @@
-using Base.Core.Tenant;
 using Base.Domain.Interfaces;
 using Base.Domain.Interfaces.Repositories;
 using Base.Infrastructure.Data;
@@ -9,7 +8,6 @@ namespace Base.Infrastructure;
 public class UnitOfWork : IUnitOfWork
 {
     private readonly ApplicationDbContext _context;
-    private readonly ITenantContext _tenantContext;
     private IUserRepository? _users;
     private IUserCredentialsRepository? _userCredentials;
     private IRefreshTokenRepository? _refreshTokens;
@@ -19,13 +17,12 @@ public class UnitOfWork : IUnitOfWork
     private ICompanyRepository? _companies;
     private ICompanyMemberRepository? _companyMembers;
 
-    public UnitOfWork(ApplicationDbContext context, ITenantContext tenantContext)
+    public UnitOfWork(ApplicationDbContext context)
     {
         _context = context;
-        _tenantContext = tenantContext;
     }
 
-    public IUserRepository Users => _users ??= new TenantScopedUserRepository(_context, _tenantContext);
+    public IUserRepository Users => _users ??= new UserRepository(_context);
     public IUserCredentialsRepository UserCredentials => _userCredentials ??= new UserCredentialsRepository(_context);
     public IRefreshTokenRepository RefreshTokens => _refreshTokens ??= new RefreshTokenRepository(_context);
     public IPasswordResetTokenRepository PasswordResetTokens => _passwordResetTokens ??= new PasswordResetTokenRepository(_context);

@@ -12,7 +12,7 @@ public class PasswordResetTokenRepository : BaseRepository<PasswordResetToken>, 
     public async Task<PasswordResetToken?> GetByUserIdAndTokenHashAsync(int userId, string tokenHash)
     {
         return await _context.PasswordResetTokens
-            .Include(prt => prt.User)
+            .AsNoTracking()
             .FirstOrDefaultAsync(prt =>
                 prt.UserId == userId &&
                 prt.TokenHash == tokenHash &&

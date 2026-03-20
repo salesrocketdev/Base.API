@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Base.Domain.Entities;
+using Base.Infrastructure.Configuration;
 using System.Text.Json;
 
 namespace Base.Infrastructure.Data;
@@ -11,12 +12,35 @@ public class ApplicationDbContext : DbContext
     {
     }
 
+    public override int SaveChanges()
+    {
+        NormalizeCompanyNames();
+        return base.SaveChanges();
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        NormalizeCompanyNames();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        NormalizeCompanyNames();
+        return base.SaveChangesAsync(cancellationToken);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        NormalizeCompanyNames();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)
         {
-            var conn = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
-                       ?? Environment.GetEnvironmentVariable("DEFAULT_CONNECTION");
+            var conn = LocalEnvironmentBootstrap.GetDefaultConnectionString();
 
             if (string.IsNullOrWhiteSpace(conn))
             {
@@ -106,6 +130,8 @@ public class ApplicationDbContext : DbContext
             entity.Property(r => r.ExpiresAt).IsRequired();
             entity.Property(r => r.CreatedAt).IsRequired();
             entity.Property(r => r.IsRevoked).IsRequired();
+            entity.HasIndex(r => r.Token).IsUnique();
+            entity.HasIndex(r => new { r.UserId, r.IsRevoked, r.ExpiresAt });
             entity.HasOne(r => r.User).WithMany(u => u.RefreshTokens).HasForeignKey(r => r.UserId);
         });
 
@@ -116,6 +142,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(p => p.ExpiresAt).IsRequired();
             entity.Property(p => p.CreatedAt).IsRequired();
             entity.Property(p => p.IsUsed).IsRequired();
+            entity.HasIndex(p => new { p.UserId, p.TokenHash, p.IsUsed });
             entity.HasOne(p => p.User).WithMany(u => u.PasswordResetTokens).HasForeignKey(p => p.UserId);
         });
 
@@ -123,7 +150,8 @@ public class ApplicationDbContext : DbContext
         {
             entity.HasKey(c => c.Id);
             entity.Property(c => c.Name).IsRequired().HasMaxLength(100);
-            entity.HasIndex(c => c.Name).IsUnique();
+            entity.Property<string>("NameNormalized").IsRequired().HasMaxLength(100);
+            entity.HasIndex("NameNormalized").IsUnique();
             entity.Property(c => c.CreatedAt).IsRequired();
 
             var jsonConverter = new Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<JsonDocument?, string?>(
@@ -200,6 +228,24 @@ public class ApplicationDbContext : DbContext
             entity.HasQueryFilter(filter);
         }
     }
+
+    private void NormalizeCompanyNames()
+    {
+        foreach (var entry in ChangeTracker.Entries<Company>())
+        {
+            if (entry.State is not EntityState.Added and not EntityState.Modified)
+            {
+                continue;
+            }
+
+            entry.Property("NameNormalized").CurrentValue = NormalizeCompanyName(entry.Entity.Name);
+        }
+    }
+
+    public static string NormalizeCompanyName(string name)
+    {
+        return name.Trim().ToLowerInvariant();
+    }
 }
 
 public class ApplicationDbContextFactory : Microsoft.EntityFrameworkCore.Design.IDesignTimeDbContextFactory<ApplicationDbContext>
@@ -208,8 +254,7 @@ public class ApplicationDbContextFactory : Microsoft.EntityFrameworkCore.Design.
     {
         var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
 
-        var conn = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
-                   ?? Environment.GetEnvironmentVariable("DEFAULT_CONNECTION");
+        var conn = LocalEnvironmentBootstrap.GetDefaultConnectionString();
 
         if (string.IsNullOrWhiteSpace(conn))
         {

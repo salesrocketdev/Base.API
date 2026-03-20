@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using Base.Domain.Entities;
 using Base.Domain.Interfaces;
 
 namespace Base.API.Middleware;
@@ -15,39 +14,36 @@ public class TenantMiddleware
 
     public async Task InvokeAsync(HttpContext context, IUnitOfWork unitOfWork)
     {
-        // Extract user ID from JWT token
         var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier) ??
-                        context.User.FindFirst("sub");
+            context.User.FindFirst("sub");
 
         if (userIdClaim != null && int.TryParse(userIdClaim.Value, out var userId))
         {
-            CompanyMember? companyMember = null;
-
-            // Prefer explicit tenant from token (switch-organization flow).
-            var organizationClaim = context.User.FindFirst("org_pid")?.Value;
-            if (Guid.TryParse(organizationClaim, out var organizationPublicId))
+            var user = await unitOfWork.Users.GetByIdAsync(userId);
+            if (user != null)
             {
-                var company = await unitOfWork.Companies.GetByPublicIdAsync(organizationPublicId);
-                if (company != null)
-                {
-                    companyMember = await unitOfWork.CompanyMembers.GetByCompanyAndUserIdAsync(company.Id, userId);
-                }
-            }
-
-            // Backward-compatible fallback: default user membership.
-            companyMember ??= await unitOfWork.CompanyMembers.GetByUserIdAsync(userId);
-            if (companyMember != null)
-            {
-                // Add company ID to HttpContext.Items for use in services/repositories
-                context.Items["CompanyId"] = companyMember.CompanyId;
                 context.Items["UserId"] = userId;
 
-                var company = await unitOfWork.Companies.GetByIdAsync(companyMember.CompanyId);
-                if (company != null)
+                var membership = await unitOfWork.CompanyMembers.GetByUserIdAsync(userId);
+                var companyId = user.CompanyId > 0
+                    ? user.CompanyId
+                    : membership?.CompanyId ?? 0;
+
+                if (companyId > 0)
                 {
-                    context.Items["CompanyPublicId"] = company.PublicId;
+                    context.Items["CompanyId"] = companyId;
+
+                    var company = await unitOfWork.Companies.GetByIdAsync(companyId);
+                    if (company != null)
+                    {
+                        context.Items["CompanyPublicId"] = company.PublicId;
+                    }
                 }
-                context.Items["UserRole"] = companyMember.Role;
+
+                if (membership != null && membership.CompanyId == companyId)
+                {
+                    context.Items["UserRole"] = membership.Role;
+                }
             }
         }
 

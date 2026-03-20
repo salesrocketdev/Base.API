@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Base.API.Controllers;
 using Base.API.DTOs;
+using Base.Application.Interfaces.Services;
 using Base.Domain.Entities;
-using Base.Domain.Interfaces.Services;
 
 namespace Base.Tests;
 
@@ -84,9 +84,6 @@ public class AuthControllerTests
 
         public Task<(string accessToken, string refreshToken)> RefreshTokenAsync(string refreshTokenValue)
             => Task.FromResult(("access", "refresh"));
-
-        public Task<string> SwitchOrganizationAsync(int userId, Guid organizationPublicId)
-            => Task.FromResult("access");
 
         public Task LogoutAsync(int currentUserId, string refreshTokenValue) => Task.CompletedTask;
 

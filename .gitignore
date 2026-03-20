@@ -432,3 +432,8 @@ C/
 *.msix
 *.msm
 *.msp
+
+# Local .NET CLI and NuGet caches
+.dotnet/
+.dotnet-home/
+.nuget/

@@ -1,19 +1,16 @@
 using AspNetCoreRateLimit;
 using Hangfire;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
 using Base.API.Extensions;
 using Base.API.Middleware;
-using Base.Core.Security;
-using Base.Domain.Interfaces;
-using Base.Infrastructure;
+using Base.Infrastructure.Configuration;
 using Base.Infrastructure.Data;
 using Base.Infrastructure.Seeding;
 using Serilog;
 using System.Linq;
-using System.Text;
+
+LocalEnvironmentBootstrap.Initialize();
 
 var builder = WebApplication.CreateBuilder(args);
 

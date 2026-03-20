@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Base.API.Constants;
 using Base.API.DTOs;
-using Base.Domain.Interfaces.Services;
+using Base.Application.Interfaces.Services;
 using System.Security.Claims;
 
 namespace Base.API.Controllers;
@@ -69,33 +69,6 @@ public class AuthController : ControllerBase
                 ex.Message,
                 new ApiError(ApiErrorCodes.FirstAccessRequired, ex.Message, ApiErrorTypes.Validation)
             ));
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(ApiResponse<object?>.Fail(
-                ex.Message,
-                new ApiError(ApiErrorCodes.Unauthorized, ex.Message, ApiErrorTypes.Unauthorized)
-            ));
-        }
-    }
-
-    [HttpPost("switch-organization")]
-    [Authorize]
-    public async Task<IActionResult> SwitchOrganization([FromBody] SwitchOrganizationRequest request)
-    {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
-        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
-        {
-            return Unauthorized(ApiResponse<object?>.Fail(
-                "Unauthorized",
-                new ApiError(ApiErrorCodes.Unauthorized, "Unauthorized", ApiErrorTypes.Unauthorized)
-            ));
-        }
-
-        try
-        {
-            var accessToken = await _authService.SwitchOrganizationAsync(userId, request.OrganizationId);
-            return Ok(ApiResponse<SwitchOrganizationResponse>.Ok(new SwitchOrganizationResponse(accessToken)));
         }
         catch (UnauthorizedAccessException ex)
         {

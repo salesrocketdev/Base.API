@@ -6,12 +6,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
 using Base.API.Tenant;
+using Base.Application.Interfaces.Services;
+using Base.Application.Services;
 using Base.Core.Email;
 using Base.Core.Security;
 using Base.Core.Tenant;
 using Base.Domain.Interfaces;
-using Base.Domain.Interfaces.Services;
-using Base.Domain.Services;
 using Base.Infrastructure;
 using Base.Infrastructure.Data;
 using Base.Infrastructure.Seeding;
@@ -33,7 +33,9 @@ public static class ServiceCollectionExtensions
 
     public static IServiceCollection AddApplicationSecurity(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
+        services.AddScoped<Pbkdf2PasswordHasher>();
+        services.AddScoped<Argon2idPasswordHasher>();
+        services.AddScoped<IPasswordHasher, HybridPasswordHasher>();
         services.AddScoped<ITokenHasher, Sha256TokenHasher>();
         services.AddScoped<IPasswordResetOtpProtector, PasswordResetOtpProtector>();
         services.AddScoped<IJwtTokenGenerator>(sp =>
@@ -131,9 +133,10 @@ public static class ServiceCollectionExtensions
         }
 
         var storage = configuration["Hangfire:Storage"] ?? "PostgreSql";
-        var hangfireConnection = configuration.GetConnectionString("HangfireConnection")
-            ?? configuration["Hangfire:ConnectionString"]
-            ?? configuration.GetConnectionString("DefaultConnection");
+        var hangfireConnection = GetFirstConfiguredValue(
+            configuration.GetConnectionString("HangfireConnection"),
+            configuration["Hangfire:ConnectionString"],
+            configuration.GetConnectionString("DefaultConnection"));
 
         services.AddHangfire(config =>
         {
@@ -159,6 +162,19 @@ public static class ServiceCollectionExtensions
         services.AddHangfireServer();
 
         return services;
+    }
+
+    private static string? GetFirstConfiguredValue(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
     }
 
     public static IServiceCollection AddApplicationEmail(this IServiceCollection services)

@@ -4,10 +4,9 @@ using Microsoft.Extensions.Configuration;
 using Base.Core.Email;
 using Base.Core.Email.Models;
 using Base.Core.Security;
-using Base.Core.Tenant;
+using Base.Application.Services;
 using Base.Domain.Constants;
 using Base.Domain.Entities;
-using Base.Domain.Services;
 using Base.Infrastructure;
 using Base.Infrastructure.Data;
 
@@ -67,6 +66,7 @@ public class AuthServicePasswordResetTests
         });
 
         await fixture.Db.SaveChangesAsync();
+        fixture.Db.ChangeTracker.Clear();
 
         const string newPassword = "NewPassword!123";
         await fixture.Service.ResetPasswordAsync(user.Email, otp, newPassword);
@@ -75,13 +75,92 @@ public class AuthServicePasswordResetTests
         var resetToken = await fixture.Db.PasswordResetTokens.FirstAsync(t => t.UserId == user.Id);
         var refreshToken = await fixture.Db.RefreshTokens.FirstAsync(t => t.UserId == user.Id);
 
-        Assert.True(fixture.PasswordHasher.VerifyPassword(credentials.PasswordHash, newPassword));
+        Assert.StartsWith("$argon2id$", credentials.PasswordHash);
+        Assert.True(fixture.PasswordHasher.VerifyPassword(credentials.PasswordHash, newPassword).Succeeded);
         Assert.True(resetToken.IsUsed);
         Assert.NotNull(resetToken.UsedAt);
         Assert.True(refreshToken.IsRevoked);
         Assert.NotNull(refreshToken.RevokedAt);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Service.ResetPasswordAsync(user.Email, otp, "AnotherPassword!123"));
+    }
+
+    [Fact]
+    public async Task LoginAsync_WithLegacyPbkdf2Password_RehashesToArgon2id()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var user = await fixture.CreateUserAsync("legacy@test.local", "OldPassword!123", useLegacyHash: true);
+
+        var credentialsBeforeLogin = await fixture.Db.UserCredentials.AsNoTracking().FirstAsync(c => c.UserId == user.Id);
+        Assert.False(credentialsBeforeLogin.PasswordHash.StartsWith("$argon2id$", StringComparison.Ordinal));
+
+        await fixture.Service.LoginAsync(user.Email, "OldPassword!123", "127.0.0.1", "test-agent");
+
+        var credentialsAfterLogin = await fixture.Db.UserCredentials.AsNoTracking().FirstAsync(c => c.UserId == user.Id);
+        Assert.StartsWith("$argon2id$", credentialsAfterLogin.PasswordHash);
+        Assert.True(fixture.PasswordHasher.VerifyPassword(credentialsAfterLogin.PasswordHash, "OldPassword!123").Succeeded);
+    }
+
+    [Fact]
+    public async Task CompleteFirstAccessAsync_AnonymousFlow_UpdatesUserAndCreatesSession()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+
+        var company = new Company { Name = "first-access-company" };
+        await fixture.Db.Companies.AddAsync(company);
+        await fixture.Db.SaveChangesAsync();
+
+        var user = new User
+        {
+            Email = "first.access@test.local",
+            CompanyId = company.Id
+        };
+
+        await fixture.Db.Users.AddAsync(user);
+        await fixture.Db.SaveChangesAsync();
+
+        await fixture.Db.CompanyMembers.AddAsync(new CompanyMember
+        {
+            CompanyId = company.Id,
+            UserId = user.Id,
+            Role = "Owner",
+            CreatedAt = DateTime.UtcNow
+        });
+        await fixture.Db.PasswordResetTokens.AddAsync(new PasswordResetToken
+        {
+            UserId = user.Id,
+            TokenHash = fixture.OtpProtector.HashOtp(user.Id, "654321"),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(20)
+        });
+
+        await fixture.Db.SaveChangesAsync();
+        fixture.Db.ChangeTracker.Clear();
+
+        var (updatedUser, accessToken, refreshToken) = await fixture.Service.CompleteFirstAccessAsync(
+            user.Email,
+            "654321",
+            "NewPassword!123",
+            "Jane",
+            "Doe",
+            "127.0.0.1",
+            "test-agent");
+
+        Assert.Equal("Jane Doe", updatedUser.Name);
+        Assert.Equal("access-token", accessToken);
+        Assert.Equal("refresh-token", refreshToken);
+
+        var credentials = await fixture.Db.UserCredentials.AsNoTracking().FirstAsync(c => c.UserId == updatedUser.Id);
+        Assert.True(fixture.PasswordHasher.VerifyPassword(credentials.PasswordHash, "NewPassword!123").Succeeded);
+
+        var persistedUser = await fixture.Db.Users.AsNoTracking().FirstAsync(u => u.Id == updatedUser.Id);
+        Assert.Equal("Jane Doe", persistedUser.Name);
+        Assert.False(string.IsNullOrWhiteSpace(persistedUser.AvatarUrl));
+
+        var resetToken = await fixture.Db.PasswordResetTokens.AsNoTracking().FirstAsync(t => t.UserId == updatedUser.Id);
+        Assert.True(resetToken.IsUsed);
+
+        var storedRefreshToken = await fixture.Db.RefreshTokens.AsNoTracking().FirstAsync(t => t.UserId == updatedUser.Id);
+        Assert.Equal(fixture.TokenHasher.HashToken("refresh-token"), storedRefreshToken.Token);
     }
 
     private sealed class TestFixture : IAsyncDisposable
@@ -92,7 +171,8 @@ public class AuthServicePasswordResetTests
         public CapturingSendMailService MailService { get; }
         public Sha256TokenHasher TokenHasher { get; }
         public IPasswordResetOtpProtector OtpProtector { get; }
-        public Pbkdf2PasswordHasher PasswordHasher { get; }
+        public IPasswordHasher PasswordHasher { get; }
+        public Pbkdf2PasswordHasher LegacyPasswordHasher { get; }
 
         private TestFixture(
             SqliteConnection connection,
@@ -101,7 +181,8 @@ public class AuthServicePasswordResetTests
             CapturingSendMailService mailService,
             Sha256TokenHasher tokenHasher,
             IPasswordResetOtpProtector otpProtector,
-            Pbkdf2PasswordHasher passwordHasher)
+            IPasswordHasher passwordHasher,
+            Pbkdf2PasswordHasher legacyPasswordHasher)
         {
             _connection = connection;
             Db = db;
@@ -110,6 +191,7 @@ public class AuthServicePasswordResetTests
             TokenHasher = tokenHasher;
             OtpProtector = otpProtector;
             PasswordHasher = passwordHasher;
+            LegacyPasswordHasher = legacyPasswordHasher;
         }
 
         public static async Task<TestFixture> CreateAsync()
@@ -127,27 +209,35 @@ public class AuthServicePasswordResetTests
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
+                    ["Security:PasswordHashing:TimeCost"] = "1",
+                    ["Security:PasswordHashing:MemoryCost"] = "1024",
+                    ["Security:PasswordHashing:Lanes"] = "1",
+                    ["Security:PasswordHashing:Threads"] = "1",
+                    ["Security:PasswordHashing:HashLength"] = "16",
+                    ["Security:PasswordHashing:SaltLength"] = "16",
+                    ["Security:PasswordHashing:Pepper"] = "test-password-pepper-1234567890",
                     ["Security:PasswordHashing:Iterations"] = "1000",
                     ["Security:PasswordReset:Pepper"] = "test-pepper-1234567890"
                 })
                 .Build();
 
-            var passwordHasher = new Pbkdf2PasswordHasher(configuration);
+            var legacyPasswordHasher = new Pbkdf2PasswordHasher(configuration);
+            var passwordHasher = new HybridPasswordHasher(new Argon2idPasswordHasher(configuration), legacyPasswordHasher);
             var tokenHasher = new Sha256TokenHasher();
             var otpProtector = new PasswordResetOtpProtector(configuration);
             var mail = new CapturingSendMailService();
             var service = new AuthService(
-                new UnitOfWork(db, new AnonymousTenantContext()),
+                new UnitOfWork(db),
                 passwordHasher,
                 new FakeJwtTokenGenerator(),
                 tokenHasher,
                 otpProtector,
                 mail);
 
-            return new TestFixture(connection, db, service, mail, tokenHasher, otpProtector, passwordHasher);
+            return new TestFixture(connection, db, service, mail, tokenHasher, otpProtector, passwordHasher, legacyPasswordHasher);
         }
 
-        public async Task<User> CreateUserAsync(string email, string password)
+        public async Task<User> CreateUserAsync(string email, string password, bool useLegacyHash = false)
         {
             var company = new Company { Name = Guid.NewGuid().ToString("N") };
             await Db.Companies.AddAsync(company);
@@ -166,10 +256,21 @@ public class AuthServicePasswordResetTests
             await Db.UserCredentials.AddAsync(new UserCredentials
             {
                 UserId = user.Id,
-                PasswordHash = PasswordHasher.HashPassword(password)
+                PasswordHash = useLegacyHash
+                    ? LegacyPasswordHasher.HashPassword(password)
+                    : PasswordHasher.HashPassword(password)
+            });
+
+            await Db.CompanyMembers.AddAsync(new CompanyMember
+            {
+                CompanyId = company.Id,
+                UserId = user.Id,
+                Role = "Owner",
+                CreatedAt = DateTime.UtcNow
             });
 
             await Db.SaveChangesAsync();
+            Db.ChangeTracker.Clear();
             return user;
         }
 
@@ -178,15 +279,6 @@ public class AuthServicePasswordResetTests
             await Db.DisposeAsync();
             await _connection.DisposeAsync();
         }
-    }
-
-    private sealed class AnonymousTenantContext : ITenantContext
-    {
-        public int CompanyId => 0;
-        public Guid CompanyPublicId => Guid.Empty;
-        public int UserId => 0;
-        public string UserRole => string.Empty;
-        public bool IsAuthenticated => false;
     }
 
     private sealed class FakeJwtTokenGenerator : IJwtTokenGenerator

@@ -4,6 +4,7 @@
         <IsPackable>false</IsPackable>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
+        <SuppressImplicitGitSourceLink>true</SuppressImplicitGitSourceLink>
     </PropertyGroup>
 
     <ItemGroup>
@@ -19,6 +20,7 @@
 
     <ItemGroup>
 
+        <ProjectReference Include="..\Base.Application\Base.Application.csproj" />
         <ProjectReference Include="..\Base.Core\Base.Core.csproj" />
         <ProjectReference Include="..\Base.Domain\Base.Domain.csproj" />
         <ProjectReference Include="..\Base.Infrastructure\Base.Infrastructure.csproj" />

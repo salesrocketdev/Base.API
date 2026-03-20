@@ -2,13 +2,25 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Base.API.Controllers;
 using Base.API.DTOs;
+using Base.Application.Interfaces.Services;
 using Base.Domain.Entities;
-using Base.Domain.Interfaces.Services;
 
 namespace Base.Tests;
 
 public class CompanyControllerTests
 {
+    [Fact]
+    public async Task GetById_ReturnsForbidden_WhenRequestedCompanyIsNotTenantCompany()
+    {
+        var service = new FakeCompanyService();
+        var controller = CreateController(service, role: "Owner", companyPublicId: Guid.NewGuid());
+
+        var result = await controller.GetById(Guid.NewGuid());
+
+        var forbidden = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+    }
+
     [Fact]
     public async Task UpdateById_ReturnsForbidden_WhenRequestedCompanyIsNotTenantCompany()
     {
@@ -34,6 +46,31 @@ public class CompanyControllerTests
         var ok = Assert.IsType<OkObjectResult>(result);
         Assert.Equal(StatusCodes.Status200OK, ok.StatusCode);
         Assert.True(service.UpdateCalled);
+    }
+
+    [Fact]
+    public async Task Create_ReturnsConflict_WhenUserAlreadyBelongsToCompany()
+    {
+        var service = new FakeCompanyService();
+        var controller = CreateController(service, role: "Owner", companyPublicId: Guid.NewGuid());
+
+        var result = await controller.Create(new CompanyCreateRequest("New Company", null));
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result);
+        Assert.Equal(StatusCodes.Status409Conflict, conflict.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_ReturnsBadRequest_ForCurrentCompanyInSingleCompanyMode()
+    {
+        var service = new FakeCompanyService();
+        var companyId = Guid.NewGuid();
+        var controller = CreateController(service, role: "Owner", companyPublicId: companyId);
+
+        var result = await controller.Delete(companyId);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(StatusCodes.Status400BadRequest, badRequest.StatusCode);
     }
 
     private static CompanyController CreateController(FakeCompanyService service, string role, Guid companyPublicId)

@@ -11,12 +11,17 @@ public class RefreshTokenRepository : BaseRepository<RefreshToken>, IRefreshToke
 
     public async Task<RefreshToken?> GetByTokenAsync(string tokenHash)
     {
-        return await _context.RefreshTokens.FirstOrDefaultAsync(rt => rt.Token == tokenHash && !rt.IsRevoked);
+        return await _context.RefreshTokens
+            .AsNoTracking()
+            .FirstOrDefaultAsync(rt => rt.Token == tokenHash && !rt.IsRevoked);
     }
 
     public async Task<IEnumerable<RefreshToken>> GetActiveTokensByUserIdAsync(int userId)
     {
-        return await _context.RefreshTokens.Where(rt => rt.UserId == userId && !rt.IsRevoked && rt.ExpiresAt > DateTime.UtcNow).ToListAsync();
+        return await _context.RefreshTokens
+            .AsNoTracking()
+            .Where(rt => rt.UserId == userId && !rt.IsRevoked && rt.ExpiresAt > DateTime.UtcNow)
+            .ToListAsync();
     }
 
     public async Task RevokeAllTokensByUserIdAsync(int userId)

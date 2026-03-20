@@ -16,18 +16,24 @@ public class BaseRepository<TEntity> : IBaseRepository<TEntity> where TEntity : 
 
     public async Task<TEntity?> GetByIdAsync(int id)
     {
-        return await _context.Set<TEntity>().FindAsync(id);
+        return await _context.Set<TEntity>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(e => EF.Property<int>(e, "Id") == id);
     }
 
     public async Task<TEntity?> GetByPublicIdAsync(Guid publicId)
     {
-        var entity = await _context.Set<TEntity>().FirstOrDefaultAsync(e => EF.Property<Guid>(e, "PublicId") == publicId);
+        var entity = await _context.Set<TEntity>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(e => EF.Property<Guid>(e, "PublicId") == publicId);
         return entity;
     }
 
     public async Task<IEnumerable<TEntity>> GetAllAsync()
     {
-        return await _context.Set<TEntity>().ToListAsync();
+        return await _context.Set<TEntity>()
+            .AsNoTracking()
+            .ToListAsync();
     }
 
     public Task<TEntity> CreateAsync(TEntity entity)
@@ -62,7 +68,8 @@ public class BaseRepository<TEntity> : IBaseRepository<TEntity> where TEntity : 
     }
     public async Task<bool> ExistsAsync(int id)
     {
-        return await _context.Set<TEntity>().FindAsync(id) != null;
+        return await _context.Set<TEntity>()
+            .AnyAsync(e => EF.Property<int>(e, "Id") == id);
     }
 }
 

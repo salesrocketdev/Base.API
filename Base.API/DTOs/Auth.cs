@@ -33,12 +33,8 @@ public record ForgotPasswordRequest(
 public record ResetPasswordRequest(
     [Required][EmailAddress] string Email,
     [Required][RegularExpression(@"^\d{6}$")]
-    [Required][StringLength(ValidationConstants.OtpLength, MinimumLength = ValidationConstants.OtpLength)] string Otp,
+    [StringLength(ValidationConstants.OtpLength, MinimumLength = ValidationConstants.OtpLength)] string Otp,
     [Required][MinLength(ValidationConstants.PasswordMinLength)] string NewPassword
-);
-
-public record SwitchOrganizationRequest(
-    [Required] Guid OrganizationId
 );
 
 public record FirstAccessCompleteRequest(
@@ -61,4 +57,3 @@ public record RefreshResponse(string AccessToken, string RefreshToken);
 
 public record LoginInitiateResponse(string NextStep, string MaskedEmail);
 
-public record SwitchOrganizationResponse(string AccessToken);

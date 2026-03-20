@@ -1,9 +1,9 @@
 using System.Text.Json;
 using Base.Domain.Entities;
 using Base.Domain.Interfaces;
-using Base.Domain.Interfaces.Services;
+using Base.Application.Interfaces.Services;
 
-namespace Base.Domain.Services;
+namespace Base.Application.Services;
 
 public class CompanyService : ICompanyService
 {
@@ -51,7 +51,10 @@ public class CompanyService : ICompanyService
     public async Task UpdateAsync(Guid publicId, string name, string? settingsJson = null)
     {
         var company = await _unitOfWork.Companies.GetByPublicIdAsync(publicId);
-        if (company == null) throw new InvalidOperationException("Company not found.");
+        if (company == null)
+        {
+            throw new InvalidOperationException("Company not found.");
+        }
 
         if (await _unitOfWork.Companies.NameExistsAsync(name, company.Id))
         {
@@ -82,7 +85,6 @@ public class CompanyService : ICompanyService
         await _unitOfWork.SaveChangesAsync();
     }
 
-    // --- Tenant-scoped helpers ---
     public async Task<Company?> GetByCompanyIdWithMembersAsync(int companyId)
     {
         return await _unitOfWork.Companies.GetByIdWithMembersAsync(companyId);
@@ -91,7 +93,10 @@ public class CompanyService : ICompanyService
     public async Task UpdateByCompanyIdAsync(int companyId, string name, string? settingsJson = null)
     {
         var company = await _unitOfWork.Companies.GetByIdAsync(companyId);
-        if (company == null) throw new InvalidOperationException("Company not found.");
+        if (company == null)
+        {
+            throw new InvalidOperationException("Company not found.");
+        }
 
         if (await _unitOfWork.Companies.NameExistsAsync(name, companyId))
         {
@@ -118,13 +123,12 @@ public class CompanyService : ICompanyService
             throw new InvalidOperationException("User not found. Invitation flow for unknown users is not implemented.");
         }
 
-        // User must not be already in any company (MVP constraint: 1 user ↔ 1 company)
         if (await _unitOfWork.CompanyMembers.IsUserInAnyCompanyAsync(user.Id))
         {
             throw new InvalidOperationException("User is already a member of a company.");
         }
 
-                var company = await _unitOfWork.Companies.GetByIdAsync(companyId);
+        var company = await _unitOfWork.Companies.GetByIdAsync(companyId);
         if (company == null)
         {
             throw new InvalidOperationException("Company not found.");
@@ -142,7 +146,6 @@ public class CompanyService : ICompanyService
 
         var created = await _unitOfWork.CompanyMembers.CreateAsync(companyMember);
 
-        // Update user's CompanyId for convenience (MVP behavior)
         user.CompanyId = companyId;
         await _unitOfWork.Users.UpdateAsync(user);
 
@@ -151,6 +154,3 @@ public class CompanyService : ICompanyService
         return created;
     }
 }
-
-
-

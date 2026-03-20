@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 
 namespace Base.Core.Security;
 
-public class Pbkdf2PasswordHasher : IPasswordHasher
+public class Pbkdf2PasswordHasher
 {
     private const int SaltSize = 16; // 128 bits
     private const int KeySize = 32; // 256 bits
@@ -33,23 +33,35 @@ public class Pbkdf2PasswordHasher : IPasswordHasher
         return Convert.ToBase64String(hashBytes);
     }
 
-    public bool VerifyPassword(string hashedPassword, string password)
+    public PasswordVerificationResult VerifyPassword(string hashedPassword, string password)
     {
-        var hashBytes = Convert.FromBase64String(hashedPassword);
+        byte[] hashBytes;
+        try
+        {
+            hashBytes = Convert.FromBase64String(hashedPassword);
+        }
+        catch (FormatException)
+        {
+            return PasswordVerificationResult.Failed;
+        }
 
         if (hashBytes.Length != SaltSize + KeySize)
         {
-            return false;
+            return PasswordVerificationResult.Failed;
         }
 
         var salt = new byte[SaltSize];
         Array.Copy(hashBytes, 0, salt, 0, SaltSize);
 
         var hash = Rfc2898DeriveBytes.Pbkdf2(password, salt, _iterations, HashAlgorithmName.SHA256, KeySize);
-        return CryptographicOperations.FixedTimeEquals(
+        var succeeded = CryptographicOperations.FixedTimeEquals(
             hashBytes.AsSpan(SaltSize, KeySize),
             hash
         );
+
+        return succeeded
+            ? PasswordVerificationResult.SuccessRehashRequired
+            : PasswordVerificationResult.Failed;
     }
 }
 

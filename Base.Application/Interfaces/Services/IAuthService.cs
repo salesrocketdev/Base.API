@@ -1,6 +1,6 @@
 using Base.Domain.Entities;
 
-namespace Base.Domain.Interfaces.Services;
+namespace Base.Application.Interfaces.Services;
 
 public interface IAuthService
 {
@@ -8,7 +8,6 @@ public interface IAuthService
     Task<(string nextStep, string maskedEmail)> InitiateLoginAsync(string email);
     Task<(User user, string accessToken, string refreshToken)> LoginAsync(string email, string password, string ipAddress, string userAgent);
     Task<(string accessToken, string refreshToken)> RefreshTokenAsync(string refreshTokenValue);
-    Task<string> SwitchOrganizationAsync(int userId, Guid organizationPublicId);
     Task LogoutAsync(int currentUserId, string refreshTokenValue);
     Task<User?> GetCurrentUserAsync(int userId);
     Task InitiatePasswordResetAsync(string email);

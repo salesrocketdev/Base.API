@@ -1,4 +1,4 @@
-﻿---
+---
 name: base-boilerplate-context
 description: Preserve and extend this .NET API boilerplate architecture. Use when adding or modifying features to keep clean layering (Base.API/Base.Domain/Base.Infrastructure/Base.Core), tenant isolation, authentication flows, logging, seeders, migrations, Docker compatibility, and test coverage without introducing CRM-specific business rules.
 ---

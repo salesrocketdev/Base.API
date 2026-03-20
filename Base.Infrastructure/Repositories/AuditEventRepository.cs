@@ -11,7 +11,11 @@ public class AuditEventRepository : BaseRepository<AuditEvent>, IAuditEventRepos
 
     public async Task<IEnumerable<AuditEvent>> GetByUserIdAsync(int userId)
     {
-        return await _context.AuditEvents.Where(a => a.UserId == userId).OrderByDescending(a => a.Timestamp).ToListAsync();
+        return await _context.AuditEvents
+            .AsNoTracking()
+            .Where(a => a.UserId == userId)
+            .OrderByDescending(a => a.Timestamp)
+            .ToListAsync();
     }
 }
 
