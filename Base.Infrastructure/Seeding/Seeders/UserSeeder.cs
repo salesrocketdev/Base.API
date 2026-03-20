@@ -59,26 +59,22 @@ public class UserSeeder : ISeeder
             CompanyId = company.Id
         };
 
-        _db.Users.Add(user);
-        await _db.SaveChangesAsync();
-
         var credentials = new UserCredentials
         {
-            UserId = user.Id,
+            User = user,
             PasswordHash = _passwordHasher.HashPassword(password)
         };
-
-        _db.UserCredentials.Add(credentials);
-        await _db.SaveChangesAsync();
 
         var companyMember = new CompanyMember
         {
             CompanyId = company.Id,
-            UserId = user.Id,
+            User = user,
             Role = "Owner",
             CreatedAt = DateTime.UtcNow
         };
 
+        _db.Users.Add(user);
+        _db.UserCredentials.Add(credentials);
         _db.CompanyMembers.Add(companyMember);
         await _db.SaveChangesAsync();
     }

@@ -19,30 +19,17 @@ public class TenantMiddleware
 
         if (userIdClaim != null && int.TryParse(userIdClaim.Value, out var userId))
         {
-            var user = await unitOfWork.Users.GetByIdAsync(userId);
-            if (user != null)
+            context.Items["UserId"] = userId;
+
+            var tenantAccess = await unitOfWork.Users.GetTenantAccessByIdAsync(userId);
+            if (tenantAccess != null)
             {
-                context.Items["UserId"] = userId;
+                context.Items["CompanyId"] = tenantAccess.CompanyId;
+                context.Items["CompanyPublicId"] = tenantAccess.CompanyPublicId;
 
-                var membership = await unitOfWork.CompanyMembers.GetByUserIdAsync(userId);
-                var companyId = user.CompanyId > 0
-                    ? user.CompanyId
-                    : membership?.CompanyId ?? 0;
-
-                if (companyId > 0)
+                if (!string.IsNullOrWhiteSpace(tenantAccess.UserRole))
                 {
-                    context.Items["CompanyId"] = companyId;
-
-                    var company = await unitOfWork.Companies.GetByIdAsync(companyId);
-                    if (company != null)
-                    {
-                        context.Items["CompanyPublicId"] = company.PublicId;
-                    }
-                }
-
-                if (membership != null && membership.CompanyId == companyId)
-                {
-                    context.Items["UserRole"] = membership.Role;
+                    context.Items["UserRole"] = tenantAccess.UserRole;
                 }
             }
         }

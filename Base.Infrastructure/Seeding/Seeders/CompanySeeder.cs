@@ -53,29 +53,6 @@ public class CompanySeeder : ISeeder
             _db.Companies.Add(company);
             await _db.SaveChangesAsync();
             _logger.LogInformation("Seed company created successfully with ID: {CompanyId}", company.Id);
-
-            // Associate admin user with the company
-            var adminUser = await _db.Users.FirstOrDefaultAsync();
-            if (adminUser != null)
-            {
-                adminUser.CompanyId = company.Id;
-
-                var companyMember = new CompanyMember
-                {
-                    CompanyId = company.Id,
-                    UserId = adminUser.Id,
-                    Role = "Owner",
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                _db.CompanyMembers.Add(companyMember);
-                await _db.SaveChangesAsync();
-                _logger.LogInformation("Admin user {UserId} associated with company {CompanyId} as Owner", adminUser.Id, company.Id);
-            }
-            else
-            {
-                _logger.LogWarning("No admin user found to associate with seed company");
-            }
         }
         catch (Exception ex)
         {

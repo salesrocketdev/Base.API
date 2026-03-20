@@ -9,12 +9,15 @@ public class AuditEventRepository : BaseRepository<AuditEvent>, IAuditEventRepos
 {
     public AuditEventRepository(ApplicationDbContext context) : base(context) { }
 
-    public async Task<IEnumerable<AuditEvent>> GetByUserIdAsync(int userId)
+    public async Task<IReadOnlyList<AuditEvent>> GetByUserIdAsync(int userId, int take = 100)
     {
+        take = Math.Clamp(take, 1, 500);
+
         return await _context.AuditEvents
             .AsNoTracking()
             .Where(a => a.UserId == userId)
             .OrderByDescending(a => a.Timestamp)
+            .Take(take)
             .ToListAsync();
     }
 }

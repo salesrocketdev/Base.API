@@ -49,8 +49,6 @@ public class CompanyMemberRepository : BaseRepository<CompanyMember>, ICompanyMe
     {
         return await _context.CompanyMembers
             .AsNoTracking()
-            .Include(cm => cm.Company)
-            .Include(cm => cm.User)
             .FirstOrDefaultAsync(cm => cm.UserId == userId);
     }
 
@@ -58,8 +56,6 @@ public class CompanyMemberRepository : BaseRepository<CompanyMember>, ICompanyMe
     {
         return await _context.CompanyMembers
             .AsNoTracking()
-            .Include(cm => cm.Company)
-            .Include(cm => cm.User)
             .FirstOrDefaultAsync(cm => cm.CompanyId == companyId && cm.UserId == userId);
     }
 

@@ -104,7 +104,7 @@ Responsavel por:
 - `UnitOfWork`
 - Migrations
 - Seeding
-- Bootstrap de ambiente local para design-time
+- Suporte de configuracao para EF design-time
 
 Exemplos:
 
@@ -463,50 +463,97 @@ Observacoes:
 
 ## Configuracao
 
-Variaveis importantes:
+Fontes de configuracao recomendadas:
 
-- `ConnectionStrings__DefaultConnection` ou `DEFAULT_CONNECTION`
+- Desenvolvimento local com `dotnet run`: `appsettings.json`, `appsettings.Development.json`, `dotnet user-secrets` e variaveis de ambiente.
+- Docker, VPS e Azure: variaveis de ambiente.
+- Azure em producao: opcionalmente App Settings + Key Vault, mantendo as mesmas chaves.
+
+Chaves importantes da aplicacao:
+
+- `ConnectionStrings__DefaultConnection`
+- `ConnectionStrings__HangfireConnection`
+- `Jwt__SecretKey`
+- `Jwt__Issuer`
+- `Jwt__Audience`
+- `Jwt__AccessTokenExpirationMinutes`
+- `Jwt__RefreshTokenExpirationDays`
+- `Security__PasswordHashing__TimeCost`
+- `Security__PasswordHashing__MemoryCost`
+- `Security__PasswordHashing__Lanes`
+- `Security__PasswordHashing__Threads`
+- `Security__PasswordHashing__HashLength`
+- `Security__PasswordHashing__SaltLength`
+- `Security__PasswordHashing__Pepper`
+- `Security__PasswordReset__Pepper`
+- `Seed__Enabled`
+- `Seed__AdminEmail`
+- `Seed__AdminPassword`
+- `Seed__AdminName`
+- `Seed__CompanyName`
+- `Database__ApplyMigrationsOnStartup`
+- `Hangfire__Storage`
+- `Hangfire__ConnectionString`
+- `Logging__Seq__ServerUrl`
+
+Variaveis de infraestrutura do Docker:
+
 - `POSTGRES_USER`
 - `POSTGRES_PASSWORD`
 - `POSTGRES_DB`
-- `POSTGRES_HOST`
-- `POSTGRES_PORT`
-- `JWT__SECRETKEY`
-- `JWT__ISSUER`
-- `JWT__AUDIENCE`
-- `JWT__ACCESSTOKENEXPIRATIONMINUTES`
-- `JWT__REFRESHTOKENEXPIRATIONDAYS`
-- `SECURITY__PASSWORDHASHING__TIMECOST`
-- `SECURITY__PASSWORDHASHING__MEMORYCOST`
-- `SECURITY__PASSWORDHASHING__LANES`
-- `SECURITY__PASSWORDHASHING__THREADS`
-- `SECURITY__PASSWORDHASHING__HASHLENGTH`
-- `SECURITY__PASSWORDHASHING__SALTLENGTH`
-- `SECURITY__PASSWORDHASHING__PEPPER`
-- `SECURITY__PASSWORDRESET__PEPPER`
-- `SEED__ENABLED`
-- `SEED__SCENARIO`
-- `SEED__RESETBEFORESEED`
-- `SEED__ADMINEMAIL`
-- `SEED__ADMINPASSWORD`
-- `SEED__ADMINNAME`
-- `SEED__LEARNEREMAIL`
-- `SEED__LEARNERPASSWORD`
-- `SEED__LEARNERNAME`
-- `SEED__COMPANYNAME`
-- `DATABASE__APPLYMIGRATIONSONSTARTUP`
-- `HANGFIRE__STORAGE`
-- `HANGFIRE__CONNECTIONSTRING`
+- `CONNECTIONSTRINGS__DEFAULTCONNECTION` para sobrescrever o banco do container quando necessario
 
 ## Execucao local
 
-### Sem Docker
+### Setup rapido local
+
+Se voce quer apenas fazer a API subir no ambiente de desenvolvimento:
 
 1. Copie `.env.example` para `.env`.
-2. Ajuste os segredos e os valores `POSTGRES_*` do banco local.
+2. Ajuste `POSTGRES_USER`, `POSTGRES_PASSWORD` e `POSTGRES_DB`.
+3. Suba a infraestrutura com `docker compose -f docker-compose.dev.yml up -d`.
+4. Rode `dotnet restore -m:1`.
+5. Configure os `user-secrets` da API:
+
+```bash
+dotnet user-secrets --project Base.API set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=base_db;Username=base;Password=change_me_strong_password;Ssl Mode=Disable"
+dotnet user-secrets --project Base.API set "Jwt:SecretKey" "change_me_super_secret_key_with_32_chars_min"
+dotnet user-secrets --project Base.API set "Security:PasswordHashing:Pepper" "change_me_password_pepper"
+dotnet user-secrets --project Base.API set "Security:PasswordReset:Pepper" "change_me_reset_pepper"
+dotnet user-secrets --project Base.API set "Seed:AdminPassword" "StrongPassword!123"
+dotnet user-secrets --project Base.API set "Seed:Enabled" "true"
+```
+
+6. Confira o que esta salvo com `dotnet user-secrets --project Base.API list`.
+7. Execute `dotnet run --project Base.API`.
+8. A API sobe em `http://localhost:5296` e `https://localhost:7279` pelos perfis locais.
+9. Em `Development`, o dashboard do Hangfire fica disponivel em `http://localhost:5296/hangfire` e `https://localhost:7279/hangfire`.
+
+### API local + infraestrutura via Docker
+
+1. Copie `.env.example` para `.env`.
+2. Ajuste `POSTGRES_USER`, `POSTGRES_PASSWORD` e `POSTGRES_DB` para a infraestrutura local do Docker.
 3. Suba apenas a infraestrutura local com `docker compose -f docker-compose.dev.yml up -d`.
-4. Execute `dotnet run --project Base.API` ou `./run-dev.ps1` / `./run-dev.sh`.
-5. Se o HTTPS local reclamar de certificado no `dotnet run`, execute `dotnet dev-certs https --clean` e depois `dotnet dev-certs https --trust`.
+4. Rode `dotnet restore -m:1`.
+5. Configure os segredos locais da API:
+
+```bash
+dotnet user-secrets --project Base.API set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=base_db;Username=base;Password=change_me_strong_password;Ssl Mode=Disable"
+dotnet user-secrets --project Base.API set "Jwt:SecretKey" "change_me_super_secret_key_with_32_chars_min"
+dotnet user-secrets --project Base.API set "Security:PasswordHashing:Pepper" "change_me_password_pepper"
+dotnet user-secrets --project Base.API set "Security:PasswordReset:Pepper" "change_me_reset_pepper"
+```
+
+6. Opcionalmente configure `Seed:AdminPassword` e `Seed:Enabled` via `dotnet user-secrets` se quiser popular dados locais.
+7. Execute `dotnet run --project Base.API` ou `./run-dev.ps1` / `./run-dev.sh`.
+8. Se o HTTPS local reclamar de certificado no `dotnet run`, execute `dotnet dev-certs https --clean` e depois `dotnet dev-certs https --trust`.
+
+Observacoes:
+
+- Chaves opcionais com valor vazio, como `ZeptoMailSettings:Token`, `Fcm:ProjectId` e `Hangfire:ConnectionString`, nao precisam ser cadastradas no `user-secrets`.
+- Se voce trocar `POSTGRES_USER`, `POSTGRES_PASSWORD` ou `POSTGRES_DB` em `.env`, atualize tambem `ConnectionStrings:DefaultConnection` no `user-secrets`.
+- O `docker-compose.dev.yml` sobe apenas `db`, `redis` e `seq`; a API local roda por `dotnet run`.
+- Em `Development`, `Hangfire:Enabled=true` e `Hangfire:UseDashboard=true` em [appsettings.Development.json](/C:/dev/Base.API/Base.API/appsettings.Development.json), entao o dashboard fica em `/hangfire`.
 
 ### Com Docker
 
@@ -514,6 +561,7 @@ Variaveis importantes:
 2. Execute `docker compose up --build -d`.
 3. Endpoints:
    - API: `http://localhost:5000`
+   - API HTTPS: `https://localhost:5001`
    - Seq: `http://localhost:5342`
 
 Notas de runtime:
@@ -521,7 +569,8 @@ Notas de runtime:
 - em `Development`, a API roda por `dotnet run` e aplica migrations no startup
 - em `Production`, o compose principal sobe `migrator` + `api`
 - o `migrator` aplica migrations versionadas por padrao
-- fora do Docker, a API carrega `.env` automaticamente e monta `ConnectionStrings__DefaultConnection` a partir de `POSTGRES_*` quando necessario
+- fora do Docker, a API usa `dotnet user-secrets` para segredos locais
+- em VPS ou Azure, reutilize as mesmas chaves via variaveis de ambiente ou App Settings
 
 ## Build e testes
 
@@ -537,5 +586,5 @@ Se voce alterar o modelo EF:
 
 ```bash
 dotnet build Base.Infrastructure/Base.Infrastructure.csproj -m:1
-dotnet ef migrations add NomeDaMigration --project Base.Infrastructure --startup-project Base.Infrastructure
+dotnet ef migrations add NomeDaMigration --project Base.Infrastructure --startup-project Base.API
 ```

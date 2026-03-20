@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Base.Domain.Entities;
-using Base.Infrastructure.Configuration;
 using System.Text.Json;
 
 namespace Base.Infrastructure.Data;
@@ -40,11 +39,11 @@ public class ApplicationDbContext : DbContext
     {
         if (!optionsBuilder.IsConfigured)
         {
-            var conn = LocalEnvironmentBootstrap.GetDefaultConnectionString();
+            var conn = DesignTimeApplicationConfiguration.GetDefaultConnectionString();
 
             if (string.IsNullOrWhiteSpace(conn))
             {
-                throw new InvalidOperationException("Database connection string not configured for design-time. Set 'ConnectionStrings__DefaultConnection' or 'DEFAULT_CONNECTION' environment variable.");
+                throw new InvalidOperationException("Database connection string not configured. Configure ConnectionStrings:DefaultConnection via appsettings or environment variables.");
             }
 
             optionsBuilder.UseNpgsql(conn);
@@ -253,55 +252,74 @@ public class ApplicationDbContextFactory : Microsoft.EntityFrameworkCore.Design.
     public ApplicationDbContext CreateDbContext(string[] args)
     {
         var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
-
-        var conn = LocalEnvironmentBootstrap.GetDefaultConnectionString();
-
-        if (string.IsNullOrWhiteSpace(conn))
-        {
-            var basePaths = new[]
-            {
-                Directory.GetCurrentDirectory(),
-                Path.Combine(Directory.GetCurrentDirectory(), "Base.API"),
-                Path.Combine(Directory.GetCurrentDirectory(), "src", "Base.API")
-            };
-
-            foreach (var basePath in basePaths)
-            {
-                if (!Directory.Exists(basePath))
-                {
-                    continue;
-                }
-
-                try
-                {
-                    var configuration = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
-                        .AddJsonFile(Path.Combine(basePath, "appsettings.json"), optional: true, reloadOnChange: false)
-                        .AddJsonFile(Path.Combine(basePath, "appsettings.Development.json"), optional: true, reloadOnChange: false)
-                        .AddEnvironmentVariables()
-                        .Build();
-
-                    conn = configuration.GetConnectionString("DefaultConnection")
-                           ?? configuration["DEFAULT_CONNECTION"];
-                }
-                catch
-                {
-                }
-
-                if (!string.IsNullOrWhiteSpace(conn))
-                {
-                    break;
-                }
-            }
-        }
+        var conn = DesignTimeApplicationConfiguration.GetDefaultConnectionString();
 
         if (string.IsNullOrWhiteSpace(conn))
         {
-            throw new InvalidOperationException("Design-time DbContext requires a connection string. Set 'ConnectionStrings__DefaultConnection' or 'DEFAULT_CONNECTION' environment variable.");
+            throw new InvalidOperationException("Design-time DbContext requires ConnectionStrings:DefaultConnection from appsettings or environment variables.");
         }
 
         optionsBuilder.UseNpgsql(conn);
 
         return new ApplicationDbContext(optionsBuilder.Options);
+    }
+}
+
+internal static class DesignTimeApplicationConfiguration
+{
+    public static string? GetDefaultConnectionString(string? startDirectory = null)
+    {
+        var configuration = Build(startDirectory);
+        return configuration.GetConnectionString("DefaultConnection")
+            ?? configuration["DEFAULT_CONNECTION"];
+    }
+
+    private static Microsoft.Extensions.Configuration.IConfigurationRoot Build(string? startDirectory = null)
+    {
+        var environmentName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+            ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT");
+        var apiContentRoot = ResolveApiContentRoot(startDirectory);
+
+        var builder = new Microsoft.Extensions.Configuration.ConfigurationBuilder();
+
+        if (!string.IsNullOrWhiteSpace(apiContentRoot))
+        {
+            builder.SetBasePath(apiContentRoot)
+                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false);
+
+            if (!string.IsNullOrWhiteSpace(environmentName))
+            {
+                builder.AddJsonFile($"appsettings.{environmentName}.json", optional: true, reloadOnChange: false);
+            }
+        }
+
+        builder
+            .AddEnvironmentVariables();
+
+        return builder.Build();
+    }
+
+    private static string? ResolveApiContentRoot(string? startDirectory)
+    {
+        var current = new DirectoryInfo(startDirectory ?? Directory.GetCurrentDirectory());
+
+        while (current is not null)
+        {
+            var directApiPath = Path.Combine(current.FullName, "Base.API");
+            if (File.Exists(Path.Combine(directApiPath, "Base.API.csproj")))
+            {
+                return directApiPath;
+            }
+
+            if (File.Exists(Path.Combine(current.FullName, "Base.API.csproj")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        return null;
     }
 }
 

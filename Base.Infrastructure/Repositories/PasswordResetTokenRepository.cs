@@ -23,14 +23,18 @@ public class PasswordResetTokenRepository : BaseRepository<PasswordResetToken>, 
     public async Task InvalidateActiveTokensByUserIdAsync(int userId)
     {
         var now = DateTime.UtcNow;
-        var activeTokens = await _context.PasswordResetTokens
-            .Where(prt => prt.UserId == userId && !prt.IsUsed && prt.ExpiresAt > now)
-            .ToListAsync();
 
-        foreach (var token in activeTokens)
+        await _context.PasswordResetTokens
+            .Where(prt => prt.UserId == userId && !prt.IsUsed && prt.ExpiresAt > now)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(prt => prt.IsUsed, true)
+                .SetProperty(prt => prt.UsedAt, now));
+
+        foreach (var entry in _context.ChangeTracker.Entries<PasswordResetToken>()
+                     .Where(entry => entry.Entity.UserId == userId && !entry.Entity.IsUsed && entry.Entity.ExpiresAt > now))
         {
-            token.IsUsed = true;
-            token.UsedAt = now;
+            entry.Entity.IsUsed = true;
+            entry.Entity.UsedAt = now;
         }
     }
 }

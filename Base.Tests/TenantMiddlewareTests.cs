@@ -64,4 +64,58 @@ public class TenantMiddlewareTests
         Assert.Equal(company.PublicId, Assert.IsType<Guid>(context.Items["CompanyPublicId"]));
         Assert.Equal("Owner", Assert.IsType<string>(context.Items["UserRole"]));
     }
+
+    [Fact]
+    public async Task InvokeAsync_DoesNotPopulateCompanyContext_WhenMembershipDoesNotMatchUserCompany()
+    {
+        await using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var db = new ApplicationDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var companyA = new Company { Name = "company-a" };
+        var companyB = new Company { Name = "company-b" };
+        await db.Companies.AddRangeAsync(companyA, companyB);
+        await db.SaveChangesAsync();
+
+        var user = new User
+        {
+            Email = "tenant-mismatch@test.local",
+            CompanyId = companyA.Id
+        };
+
+        await db.Users.AddAsync(user);
+        await db.SaveChangesAsync();
+
+        await db.CompanyMembers.AddAsync(new CompanyMember
+        {
+            CompanyId = companyB.Id,
+            UserId = user.Id,
+            Role = "Owner",
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var context = new DefaultHttpContext();
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(
+            new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())
+            },
+            "test"));
+
+        var middleware = new TenantMiddleware(_ => Task.CompletedTask);
+
+        await middleware.InvokeAsync(context, new UnitOfWork(db));
+
+        Assert.Equal(user.Id, Assert.IsType<int>(context.Items["UserId"]));
+        Assert.False(context.Items.ContainsKey("CompanyId"));
+        Assert.False(context.Items.ContainsKey("CompanyPublicId"));
+        Assert.False(context.Items.ContainsKey("UserRole"));
+    }
 }

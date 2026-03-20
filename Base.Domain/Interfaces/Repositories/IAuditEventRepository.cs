@@ -4,6 +4,6 @@ namespace Base.Domain.Interfaces.Repositories;
 
 public interface IAuditEventRepository : IBaseRepository<AuditEvent>
 {
-    Task<IEnumerable<AuditEvent>> GetByUserIdAsync(int userId);
+    Task<IReadOnlyList<AuditEvent>> GetByUserIdAsync(int userId, int take = 100);
 }
 

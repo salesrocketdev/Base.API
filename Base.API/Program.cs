@@ -4,13 +4,10 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Base.API.Extensions;
 using Base.API.Middleware;
-using Base.Infrastructure.Configuration;
 using Base.Infrastructure.Data;
 using Base.Infrastructure.Seeding;
 using Serilog;
 using System.Linq;
-
-LocalEnvironmentBootstrap.Initialize();
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -87,6 +84,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseSerilogRequestLogging();
 app.UseForwardedHeaders();
+app.UseExceptionLogging();
 
 // Security headers
 app.Use(async (context, next) =>
@@ -109,8 +107,6 @@ app.UseAuthorization();
 
 // Tenant Middleware
 app.UseTenantMiddleware();
-
-app.UseExceptionLogging();
 
 // Hangfire Dashboard
 if (app.Environment.IsDevelopment() && app.Configuration.GetValue("Hangfire:Enabled", true) && app.Configuration.GetValue("Hangfire:UseDashboard", false))

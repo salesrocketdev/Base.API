@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Base.Core.Tenant;
@@ -26,13 +27,19 @@ public class ExceptionLoggingMiddleware
         }
         catch (Exception ex)
         {
-            var userId = tenantContext.UserId > 0 ? tenantContext.UserId : (int?)null;
+            var userId = ResolveUserId(context, tenantContext);
             var companyId = tenantContext.CompanyId > 0 ? tenantContext.CompanyId : (int?)null;
 
             try
             {
                 using var scope = _scopeFactory.CreateScope();
                 var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+                if (companyId == null && userId.HasValue)
+                {
+                    var tenantAccess = await unitOfWork.Users.GetTenantAccessByIdAsync(userId.Value);
+                    companyId = tenantAccess?.CompanyId;
+                }
 
                 var log = new AppLog
                 {
@@ -63,6 +70,26 @@ public class ExceptionLoggingMiddleware
 
             throw;
         }
+    }
+
+    private static int? ResolveUserId(HttpContext context, ITenantContext tenantContext)
+    {
+        if (tenantContext.UserId > 0)
+        {
+            return tenantContext.UserId;
+        }
+
+        if (context.Items["UserId"] is int itemUserId && itemUserId > 0)
+        {
+            return itemUserId;
+        }
+
+        var claim = context.User.FindFirst(ClaimTypes.NameIdentifier)
+            ?? context.User.FindFirst("sub");
+
+        return claim != null && int.TryParse(claim.Value, out var userId)
+            ? userId
+            : null;
     }
 
     private static string? BuildDetails(Exception ex)

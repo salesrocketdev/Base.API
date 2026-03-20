@@ -29,13 +29,6 @@ public class BaseRepository<TEntity> : IBaseRepository<TEntity> where TEntity : 
         return entity;
     }
 
-    public async Task<IEnumerable<TEntity>> GetAllAsync()
-    {
-        return await _context.Set<TEntity>()
-            .AsNoTracking()
-            .ToListAsync();
-    }
-
     public Task<TEntity> CreateAsync(TEntity entity)
     {
         _context.Set<TEntity>().Add(entity);

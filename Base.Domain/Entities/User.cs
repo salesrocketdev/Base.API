@@ -13,7 +13,8 @@ public class User : BaseEntity
 
     public string? AvatarUrl { get; set; }
 
-    // Company relationship (1 user -> 1 company in MVP)
+    // Current company in single-company mode.
+    // Role and membership metadata live in CompanyMember.
     public int CompanyId { get; set; }
     public Company Company { get; set; } = null!;
 

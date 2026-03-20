@@ -26,11 +26,19 @@ public class RefreshTokenRepository : BaseRepository<RefreshToken>, IRefreshToke
 
     public async Task RevokeAllTokensByUserIdAsync(int userId)
     {
-        var tokens = await _context.RefreshTokens.Where(rt => rt.UserId == userId && !rt.IsRevoked).ToListAsync();
-        foreach (var token in tokens)
+        var now = DateTime.UtcNow;
+
+        await _context.RefreshTokens
+            .Where(rt => rt.UserId == userId && !rt.IsRevoked)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(rt => rt.IsRevoked, true)
+                .SetProperty(rt => rt.RevokedAt, now));
+
+        foreach (var entry in _context.ChangeTracker.Entries<RefreshToken>()
+                     .Where(entry => entry.Entity.UserId == userId && !entry.Entity.IsRevoked))
         {
-            token.IsRevoked = true;
-            token.RevokedAt = DateTime.UtcNow;
+            entry.Entity.IsRevoked = true;
+            entry.Entity.RevokedAt = now;
         }
     }
 }

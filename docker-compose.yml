@@ -37,8 +37,7 @@ services:
       ASPNETCORE_ENVIRONMENT: "Production"
       ASPNETCORE_URLS: "http://+:80"
       Database__ApplyMigrationsOnStartup: "false"
-      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable"
-      DEFAULT_CONNECTION: "Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable"
+      ConnectionStrings__DefaultConnection: "${CONNECTIONSTRINGS__DEFAULTCONNECTION:-Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable}"
       DisableHttpsRedirection: "true"
       JWT__SecretKey: "${JWT__SECRETKEY}"
       JWT__Issuer: "${JWT__ISSUER}"
@@ -67,7 +66,7 @@ services:
       ZeptoMailSettings__FromAddress: "${ZEPTOMAILSETTINGS__FROMADDRESS:-noreply@base.local}"
       ZeptoMailSettings__FromName: "${ZEPTOMAILSETTINGS__FROMNAME:-Boilerplate}"
       Hangfire__Storage: "${HANGFIRE__STORAGE:-PostgreSql}"
-      Hangfire__ConnectionString: "${HANGFIRE__CONNECTIONSTRING:-Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable}"
+      Hangfire__ConnectionString: "${HANGFIRE__CONNECTIONSTRING:-}"
       Redis__Enabled: "${REDIS__ENABLED:-true}"
       Redis__ConnectionString: "${REDIS__CONNECTIONSTRING:-redis:6379}"
       Redis__InstanceName: "${REDIS__INSTANCENAME:-boilerplate}"
@@ -96,8 +95,7 @@ services:
     command: ["bash", "/src/scripts/ef-migrate.sh"]
     environment:
       ASPNETCORE_ENVIRONMENT: "Production"
-      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable"
-      DEFAULT_CONNECTION: "Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable"
+      ConnectionStrings__DefaultConnection: "${CONNECTIONSTRINGS__DEFAULTCONNECTION:-Host=db;Port=5432;Database=${POSTGRES_DB:-base_db};Username=${POSTGRES_USER:-base};Password=${POSTGRES_PASSWORD:-base};Ssl Mode=Disable}"
       DOTNET_EF: "1"
       EF_VALIDATE_PENDING_MODEL_CHANGES: "${EF_VALIDATE_PENDING_MODEL_CHANGES:-false}"
     depends_on:

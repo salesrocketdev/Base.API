@@ -4,6 +4,7 @@ WORKDIR /src
 
 # Copy csproj and restore as distinct layers
 COPY ./Base.API/*.csproj ./Base.API/
+COPY ./Base.Application/*.csproj ./Base.Application/
 COPY ./Base.Core/*.csproj ./Base.Core/
 COPY ./Base.Domain/*.csproj ./Base.Domain/
 COPY ./Base.Infrastructure/*.csproj ./Base.Infrastructure/

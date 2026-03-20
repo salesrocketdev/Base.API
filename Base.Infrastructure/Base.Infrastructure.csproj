@@ -6,6 +6,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Configuration\LocalEnvironmentBootstrap.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.2">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
