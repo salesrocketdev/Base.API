@@ -531,7 +531,10 @@ dotnet user-secrets --project Base.API set "Seed:Enabled" "true"
 
 ### API local + infraestrutura via Docker
 
-1. Copie `.env.example` para `.env`.
+1. Copie `.env.example` para `.env` utilizando o comando:
+```bash
+cp .env.example .env
+```
 2. Ajuste `POSTGRES_USER`, `POSTGRES_PASSWORD` e `POSTGRES_DB` para a infraestrutura local do Docker.
 3. Suba apenas a infraestrutura local com `docker compose -f docker-compose.dev.yml up -d`.
 4. Rode `dotnet restore -m:1`.
