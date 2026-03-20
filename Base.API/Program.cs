@@ -2,6 +2,9 @@ using AspNetCoreRateLimit;
 using Hangfire;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Storage;
 using Base.API.Extensions;
 using Base.API.Middleware;
 using Base.Infrastructure.Data;
@@ -135,6 +138,14 @@ if (!isEfTool && !isEfEnv && applyMigrationsOnStartup)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    var databaseCreator = db.Database.GetService<IRelationalDatabaseCreator>();
+    if (!await databaseCreator.ExistsAsync())
+    {
+        await databaseCreator.CreateAsync();
+    }
+
+    var historyRepository = db.Database.GetService<IHistoryRepository>();
+    await historyRepository.CreateIfNotExistsAsync();
     await db.Database.MigrateAsync();
 }
 
